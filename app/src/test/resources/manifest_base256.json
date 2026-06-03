@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "profile": "benchmark-v1",
+  "model_id": "siglip2-base-patch16-256",
+  "hf_repo": "google/siglip2-base-patch16-256",
+  "hf_revision": "3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab",
+  "onnx_source": "onnx-community",
+  "onnx_source_repo": "onnx-community/siglip2-base-patch16-256-ONNX",
+  "onnx_source_revision": "d1114256522a37ffa257a0a58017348ab0058db2",
+  "display_name": "SigLIP2 Base (256px)",
+  "params": "0.4B",
+  "resolution": 256,
+  "precision": "fp32",
+  "ram_budget_mb": 1600,
+  "transformers_version": "4.57.6",
+  "score_semantics": "siglip2_pairwise_sigmoid",
+  "logit_scale": 4.726512908935547,
+  "logit_bias": -16.77180290222168,
+  "vision": {
+    "file": "vision_model.onnx",
+    "data_file": null,
+    "bytes": 371992072,
+    "sha256": "f5cb16728a704703f05516ded628397e11dbca4de2eb5db04b0c0bcee988aa7a",
+    "data_sha256": null
+  },
+  "text": {
+    "file": "text_model.onnx",
+    "data_file": null,
+    "bytes": 1129469657,
+    "sha256": "d3de4a6bbbfcb429b6615ac496790353cf4a4fc0f19fbbe7179e523ae60daaef",
+    "data_sha256": null
+  },
+  "tokenizer": {
+    "file": "tokenizer.json",
+    "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+    "max_length": 64,
+    "pad_id": 0,
+    "padding": "max_length",
+    "padding_side": "right",
+    "truncation": true,
+    "lowercase_applied_by": "tokenizer_json"
+  },
+  "preprocess": {
+    "resize": "stretch_square",
+    "resample": "bilinear",
+    "rescale": 0.00392156862745098,
+    "mean": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "std": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "layout": "CHW"
+  },
+  "frame_pipeline": {
+    "fps": 1.0,
+    "max_frames": 300,
+    "prescale": "none",
+    "intermediate_codec": "none",
+    "resample": "bilinear"
+  }
+}

@@ -1,0 +1,30 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Build outputs at any level (app/build, etc.)
+build/
+*.apk
+*.aab
+
+# Rust tokenizer build cache (~800 MB, regenerable from cpp-tokenizer/src via cargo-ndk).
+# The runtime libs in app/src/main/jniLibs/ ARE committed so a fresh clone runs without Rust/NDK.
+app/src/main/cpp-tokenizer/target/
+
+# Signing / secrets (none expected in this repo — safety net)
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
