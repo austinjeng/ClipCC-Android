@@ -1,5 +1,7 @@
 # ClipCC-Android
 
+**English** | [繁體中文](README.zh-TW.md)
+
 Native Android app (Kotlin + Jetpack Compose / Material 3) that runs **SigLIP2 vision-language
 classification entirely on-device** and **benchmarks on-device inference speed** for four SigLIP2
 models. It reproduces the Python [clipCC](https://github.com/) pipeline's scoring (per-label sigmoid
