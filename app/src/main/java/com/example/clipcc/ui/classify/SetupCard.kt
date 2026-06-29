@@ -186,10 +186,14 @@ private fun ImportCsvButton(target: LabelTarget, vm: ClassifyViewModel, running:
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             val res = withContext(Dispatchers.IO) {
-                runCatching {
+                try {
                     val read = ctx.contentResolver.openInputStream(uri)?.use { LabelCsv.read(it) }
                         ?: error("null stream")
-                    read to LabelCsv.parse(read.text)
+                    Result.success(read to LabelCsv.parse(read.text))
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    Result.failure(t)
                 }
             }
             res.fold(
@@ -205,7 +209,11 @@ private fun ImportCsvButton(target: LabelTarget, vm: ClassifyViewModel, running:
                             LabelCsv.merge(current, parsed.labels, replace = false), current.size)
                     }
                 },
-                onFailure = { notice = "Couldn't read file (not valid text)"; preview = null },
+                onFailure = { t ->
+                    notice = if (t is java.nio.charset.CharacterCodingException)
+                        "Couldn't read file (not valid text)" else "Couldn't open file"
+                    preview = null
+                },
             )
         }
     }
@@ -229,7 +237,8 @@ private fun ImportCsvButton(target: LabelTarget, vm: ClassifyViewModel, running:
             title = { Text("Import ${p.parsed.labels.size} labels") },
             text = {
                 val extra = (if (p.read.byteTruncated || p.parsed.labelTruncated) " File was truncated." else "") +
-                    (if (p.parsed.dropped > 0) " ${p.parsed.dropped} row(s) too long, skipped." else "")
+                    (if (p.parsed.dropped > 0) " ${p.parsed.dropped} row(s) too long, skipped." else "") +
+                    (if (p.append.truncated) " The label list is full; some imported labels won't fit on Append." else "")
                 Text("Append to the current ${p.existingCount}, or replace them?$extra")
             },
             confirmButton = {
@@ -237,7 +246,10 @@ private fun ImportCsvButton(target: LabelTarget, vm: ClassifyViewModel, running:
                     TextButton(onClick = {
                         vm.setLabelList(target, p.append.labels)
                         notice = LabelCsv.appendNotice(p.read, p.parsed, p.append); preview = null
-                    }) { Text("Append (${p.append.inserted} new)") }
+                    }) {
+                        Text("Append (${p.append.inserted} new" +
+                            (if (p.append.duplicates > 0) ", ${p.append.duplicates} dup" else "") + ")")
+                    }
                     TextButton(onClick = {
                         vm.setLabelList(target, p.parsed.labels)
                         notice = LabelCsv.replaceNotice(p.read, p.parsed); preview = null

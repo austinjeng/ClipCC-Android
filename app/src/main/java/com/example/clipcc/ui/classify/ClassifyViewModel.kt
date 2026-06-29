@@ -79,11 +79,12 @@ class ClassifyViewModel(
     /** Routes a committed list to the correct field (single tested seam for CSV-import targeting). */
     fun setLabelList(target: LabelTarget, list: List<String>) {
         val s = _state.value.setup
-        when (target) {
+        return when (target) {
             LabelTarget.POSITIVE -> setLabels(list, s.negatives)
             LabelTarget.NEGATIVE -> setLabels(s.positives, list)
         }
     }
+
     fun setTemporal(o: TemporalOptions) = updateSetup { it.copy(temporal = o) }
     fun setContrast(o: ContrastOptions) = updateSetup { it.copy(contrast = o) }
 

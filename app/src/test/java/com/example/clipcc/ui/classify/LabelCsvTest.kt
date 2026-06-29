@@ -118,13 +118,41 @@ class LabelCsvTest {
     @Test fun appendNotice_with_dups_and_truncation() {
         val n = LabelCsv.appendNotice(
             LabelCsv.Read("x", true), LabelCsv.Parsed(listOf("a", "b", "c"), false, 0),
-            LabelCsv.Merged(listOf("a", "b", "c"), inserted = 1))
+            LabelCsv.Merged(listOf("a", "b", "c"), inserted = 1, duplicates = 2))
         assertEquals("Added 1 labels, skipped 2 duplicates (file truncated)", n)
+    }
+    @Test fun merge_append_caps_at_max_labels() {
+        val existing = (1..LabelCsv.MAX_LABELS).map { "l$it" }
+        val m = LabelCsv.merge(existing, listOf("new"), replace = false)
+        assertEquals(LabelCsv.MAX_LABELS, m.labels.size)  // list did not grow past the cap
+        assertEquals(0, m.inserted)
+        assertTrue(m.truncated)
+    }
+    @Test fun merge_append_partial_room_caps_and_counts() {
+        val existing = (1 until LabelCsv.MAX_LABELS).map { "l$it" }  // size MAX_LABELS - 1
+        val m = LabelCsv.merge(existing, listOf("a", "b"), replace = false)  // room for 1
+        assertEquals(LabelCsv.MAX_LABELS, m.labels.size)
+        assertEquals(1, m.inserted)
+        assertTrue(m.truncated)
+    }
+    @Test fun appendNotice_list_full() {
+        val n = LabelCsv.appendNotice(
+            LabelCsv.Read("x", false), LabelCsv.Parsed(listOf("a"), false, 0),
+            LabelCsv.Merged(listOf("a"), inserted = 0, truncated = true))
+        assertEquals("Label list full — no labels added (file truncated)", n)
     }
     @Test fun appendNotice_all_present() {
         val n = LabelCsv.appendNotice(
             LabelCsv.Read("x", false), LabelCsv.Parsed(listOf("a", "b"), false, 0),
             LabelCsv.Merged(listOf("a", "b"), inserted = 0))
         assertEquals("All 2 labels already present", n)
+    }
+    @Test fun parse_dedup_is_case_sensitive() {
+        assertEquals(listOf("Cat", "cat", "CAT"), LabelCsv.parse("Cat\ncat\nCAT").labels)
+    }
+    @Test fun merge_append_dedup_is_case_sensitive() {
+        val m = LabelCsv.merge(listOf("Cat"), listOf("cat"), replace = false)
+        assertEquals(listOf("Cat", "cat"), m.labels)
+        assertEquals(1, m.inserted)
     }
 }
