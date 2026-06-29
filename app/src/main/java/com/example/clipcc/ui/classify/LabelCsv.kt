@@ -68,6 +68,27 @@ object LabelCsv {
         return Merged(existing + added, added.size)
     }
 
+    private fun truncated(read: Read, parsed: Parsed) = read.byteTruncated || parsed.labelTruncated
+
+    private fun suffix(read: Read, parsed: Parsed): String =
+        (if (truncated(read, parsed)) " (file truncated)" else "") +
+        (if (parsed.dropped > 0) " (${parsed.dropped} too long, skipped)" else "")
+
+    fun zeroNotice(read: Read, parsed: Parsed): String =
+        if (truncated(read, parsed)) "No complete labels before the file was truncated"
+        else "No labels found in file"
+
+    fun replaceNotice(read: Read, parsed: Parsed): String =
+        "Loaded ${parsed.labels.size} labels" + suffix(read, parsed)
+
+    fun appendNotice(read: Read, parsed: Parsed, merged: Merged): String {
+        val skipped = parsed.labels.size - merged.inserted
+        val head = if (merged.inserted > 0)
+            "Added ${merged.inserted} labels" + (if (skipped > 0) ", skipped $skipped duplicates" else "")
+        else "All ${parsed.labels.size} labels already present"
+        return head + suffix(read, parsed)
+    }
+
     /** Strip one surrounding pair of double quotes and unescape "" -> " (RFC-4180 single column). */
     private fun unquote(s: String): String =
         if (s.length >= 2 && s.first() == '"' && s.last() == '"')

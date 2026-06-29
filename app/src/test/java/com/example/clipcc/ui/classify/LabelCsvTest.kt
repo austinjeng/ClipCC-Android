@@ -102,4 +102,29 @@ class LabelCsvTest {
         assertEquals(listOf("a"), m.labels)
         assertEquals(1, m.inserted)
     }
+
+    @Test fun zeroNotice_truncated_takes_precedence() {
+        val n = LabelCsv.zeroNotice(LabelCsv.Read("", true), LabelCsv.Parsed(emptyList(), false, 0))
+        assertEquals("No complete labels before the file was truncated", n)
+    }
+    @Test fun zeroNotice_plain() {
+        val n = LabelCsv.zeroNotice(LabelCsv.Read("", false), LabelCsv.Parsed(emptyList(), false, 0))
+        assertEquals("No labels found in file", n)
+    }
+    @Test fun replaceNotice_with_dropped() {
+        val n = LabelCsv.replaceNotice(LabelCsv.Read("x", false), LabelCsv.Parsed(listOf("a", "b"), false, 2))
+        assertEquals("Loaded 2 labels (2 too long, skipped)", n)
+    }
+    @Test fun appendNotice_with_dups_and_truncation() {
+        val n = LabelCsv.appendNotice(
+            LabelCsv.Read("x", true), LabelCsv.Parsed(listOf("a", "b", "c"), false, 0),
+            LabelCsv.Merged(listOf("a", "b", "c"), inserted = 1))
+        assertEquals("Added 1 labels, skipped 2 duplicates (file truncated)", n)
+    }
+    @Test fun appendNotice_all_present() {
+        val n = LabelCsv.appendNotice(
+            LabelCsv.Read("x", false), LabelCsv.Parsed(listOf("a", "b"), false, 0),
+            LabelCsv.Merged(listOf("a", "b"), inserted = 0))
+        assertEquals("All 2 labels already present", n)
+    }
 }
