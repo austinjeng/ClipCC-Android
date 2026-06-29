@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.clipcc.engine.AdviceLevel
+import com.example.clipcc.engine.Precision
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +34,7 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
         var modelMenu by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(expanded = modelMenu, onExpandedChange = { modelMenu = it }) {
             OutlinedTextField(
-                value = state.selectedModel?.let { "${it.displayName} · ${it.resolution}px · ${it.precision}" }
+                value = state.selectedModel?.let { "${it.displayName} · ${it.resolution}px" }
                     ?: "Select model",
                 onValueChange = {}, readOnly = true, label = { Text("Model") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(modelMenu) },
@@ -44,7 +47,7 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
                 }
                 state.availableModels.forEach { m ->
                     DropdownMenuItem(
-                        text = { Text("${m.displayName} · ${m.resolution}px · ${m.precision}" +
+                        text = { Text("${m.displayName} · ${m.resolution}px" +
                             if (m.ready) "" else "  (${m.reason})") },
                         enabled = m.ready,
                         onClick = { vm.selectModel(m.id); modelMenu = false })
@@ -77,6 +80,36 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
                     selected = state.mode == m, onClick = { vm.setMode(m) }, enabled = !running,
                     shape = SegmentedButtonDefaults.itemShape(i, AggMode.entries.size),
                 ) { Text(m.name.lowercase()) }
+            }
+        }
+
+        if (state.availablePrecisions.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Precision", style = MaterialTheme.typography.labelMedium)
+                if (state.precisionOverridden) {
+                    TextButton(onClick = { vm.resetPrecision() }, enabled = !running) {
+                        Text("↺ recommended")
+                    }
+                }
+            }
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                Precision.entries.forEachIndexed { i, p ->
+                    SegmentedButton(
+                        selected = state.precision == p, onClick = { vm.setPrecision(p) },
+                        enabled = !running && p in state.availablePrecisions,
+                        shape = SegmentedButtonDefaults.itemShape(i, Precision.entries.size),
+                    ) { Text(p.key) }
+                }
+            }
+            // Disclaimer only when the user has deviated from the recommendation (cosmetic when on it).
+            if (state.precisionOverridden && state.precisionAdvice.level != AdviceLevel.NONE) {
+                Text(
+                    state.precisionAdvice.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.precisionAdvice.level == AdviceLevel.WARN)
+                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

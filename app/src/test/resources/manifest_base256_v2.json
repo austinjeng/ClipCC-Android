@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "profile": "benchmark-v1",
+  "model_id": "siglip2-base-patch16-256",
+  "display_name": "SigLIP2 Base (256px)",
+  "resolution": 256,
+  "precision": "fp16",
+  "default_precision": "fp16",
+  "score_semantics": "siglip2_pairwise_sigmoid",
+  "logit_scale": 4.726512908935547,
+  "logit_bias": -16.77180290222168,
+  "precisions": {
+    "fp32": {
+      "vision": { "file": "vision_model.onnx", "data_file": null, "bytes": 371992072, "sha256": "aaa" },
+      "text": { "file": "text_model.onnx", "data_file": null, "bytes": 1129469657, "sha256": "bbb" }
+    },
+    "fp16": {
+      "vision": { "file": "vision_model_fp16.onnx", "data_file": null, "bytes": 186000000, "sha256": "ccc" },
+      "text": { "file": "text_model_fp16.onnx", "data_file": null, "bytes": 565000000, "sha256": "ddd" }
+    },
+    "int8": {
+      "vision": { "file": "vision_model_int8.onnx", "data_file": null, "bytes": 94737653, "sha256": "eee" },
+      "text": { "file": "text_model_int8.onnx", "data_file": null, "bytes": 283000000, "sha256": "fff" }
+    }
+  },
+  "tokenizer": {
+    "file": "tokenizer.json",
+    "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+    "max_length": 64,
+    "pad_id": 0,
+    "lowercase_applied_by": "tokenizer_json"
+  },
+  "preprocess": {
+    "resize": "stretch_square",
+    "resample": "bilinear",
+    "rescale": 0.00392156862745098,
+    "mean": [0.5, 0.5, 0.5],
+    "std": [0.5, 0.5, 0.5],
+    "layout": "CHW"
+  }
+}

@@ -22,7 +22,9 @@ class RealClassifier(
         val manifest = ModelBundleManifest.parse(java.io.File("${req.modelDir}/manifest.json").readText())
         val backend = req.backend.engine
         val chunkSize = ScoringPolicy.visionChunkFor(req.modelId, backend)
-        val engine = Engine(req.modelDir, manifest, env, backend, visionBatch = chunkSize)
+        // Defensive: a requested precision the bundle didn't provision falls back to its default.
+        val precision = req.precision.takeIf { it in manifest.availablePrecisions } ?: manifest.defaultPrecision
+        val engine = Engine(req.modelDir, manifest, env, backend, visionBatch = chunkSize, precision = precision)
 
         fun ckCancel() { if (isCancelled()) throw RunCancelledException() }
 

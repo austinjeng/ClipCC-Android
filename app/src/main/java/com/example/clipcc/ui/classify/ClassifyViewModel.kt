@@ -4,6 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipcc.data.ModelInfo
+import com.example.clipcc.engine.AdviceLevel
+import com.example.clipcc.engine.Precision
+import com.example.clipcc.engine.PrecisionAdvice
+import com.example.clipcc.engine.PrecisionPolicy
 import com.example.clipcc.engine.RunCancelledException
 import com.example.clipcc.engine.ScoringPolicy
 import kotlinx.coroutines.CoroutineDispatcher
@@ -42,6 +46,9 @@ class ClassifyViewModel(
                 ?.let { runCatching { AggMode.valueOf(it) }.getOrNull() } ?: AggMode.MEAN,
             positives = savedState.get<ArrayList<String>>("positives") ?: ArrayList(ScoringPolicy.DEFAULT_LABELS),
             negatives = savedState.get<ArrayList<String>>("negatives") ?: arrayListOf(),
+            precision = savedState.get<String>("precision")
+                ?.let { runCatching { Precision.valueOf(it) }.getOrNull() } ?: Precision.INT8,
+            precisionUserSet = savedState["precisionUserSet"] ?: false,
         )
         _state.value = ClassifyUiState(setup = withDerived(restored))
     }
@@ -61,12 +68,24 @@ class ClassifyViewModel(
         savedState["mode"] = s.mode.name
         savedState["positives"] = ArrayList(s.positives)
         savedState["negatives"] = ArrayList(s.negatives)
+        savedState["precision"] = s.precision.name
+        savedState["precisionUserSet"] = s.precisionUserSet
     }
 
     private fun withDerived(s: SetupState): SetupState {
         val check = LabelValidation.validate(s.positives, s.negatives, s.mode == AggMode.CONTRAST)
         val eta = s.selectedModel?.let { benchmarkMsPerFrame(it.id, s.backend)?.toLong() }
-        return s.copy(validationError = check.error, etaPerFrameMs = eta)
+        // Precision tracks the recommendation (by mode) until the user overrides; a manual choice
+        // sticks while it remains provisioned, else it falls back to the recommendation.
+        val effRec = effectiveRecommended(s)
+        val precision = if (s.precisionUserSet && s.precision in s.availablePrecisions) s.precision else effRec
+        val overridden = precision != effRec
+        val advice = s.selectedModel?.let { PrecisionPolicy.advise(it.id, s.mode.isThresholdMode, precision) }
+            ?: PrecisionAdvice(AdviceLevel.NONE, "")
+        return s.copy(
+            validationError = check.error, etaPerFrameMs = eta,
+            precision = precision, precisionOverridden = overridden, precisionAdvice = advice,
+        )
     }
 
     fun selectModel(id: String) = updateSetup { it.copy(selectedModelId = id) }
@@ -78,6 +97,15 @@ class ClassifyViewModel(
         updateSetup { it.copy(positives = positives, negatives = negatives) }
     fun setTemporal(o: TemporalOptions) = updateSetup { it.copy(temporal = o) }
     fun setContrast(o: ContrastOptions) = updateSetup { it.copy(contrast = o) }
+    // Picking the recommended value is NOT an override — it resumes tracking (clears the reset affordance).
+    fun setPrecision(p: Precision) = updateSetup { it.copy(precision = p, precisionUserSet = p != effectiveRecommended(it)) }
+    fun resetPrecision() = updateSetup { it.copy(precisionUserSet = false) }
+
+    /** The mode's recommendation, clamped to what the selected model provisions. */
+    private fun effectiveRecommended(s: SetupState): Precision {
+        val rec = PrecisionPolicy.recommended(s.mode.isThresholdMode)
+        return rec.takeIf { it in s.availablePrecisions } ?: s.availablePrecisions.firstOrNull() ?: rec
+    }
 
     fun run() {
         val s = _state.value.setup
@@ -88,6 +116,7 @@ class ClassifyViewModel(
             modelDir = model.dir, modelId = model.id, backend = s.backend,
             videoUriString = s.videoUriString!!, labels = check.cleaned, posCount = check.posCount,
             mode = s.mode, temporal = s.temporal, contrast = s.contrast,
+            precision = s.precision,   // derived: recommendation-by-mode unless manually overridden
         )
         cancelFlag.set(false)
         _state.value = _state.value.copy(run = RunState.Running(Stage.LOADING_MODEL, 0, 0))
