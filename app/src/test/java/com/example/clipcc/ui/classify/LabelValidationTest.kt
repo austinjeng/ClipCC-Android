@@ -36,4 +36,9 @@ class LabelValidationTest {
         assertEquals(2, r.posCount)
         assertEquals(null, r.error)
     }
+
+    @Test fun normalize_trims_preserving_case() {
+        assertEquals("Car", LabelValidation.normalize("  Car "))
+        assertEquals("a b", LabelValidation.normalize("a b"))
+    }
 }

@@ -199,4 +199,21 @@ class ClassifyViewModelTest {
         v.run(); advanceUntilIdle()
         assertEquals(Precision.FP32, captured!!.precision)
     }
+
+    @Test fun setLabelList_positive_changes_only_positives() {
+        val v = vm(FakeClassifier(okResult()))
+        v.setMode(AggMode.CONTRAST)
+        v.setLabels(positives = listOf("p1"), negatives = listOf("n1"))
+        v.setLabelList(LabelTarget.POSITIVE, listOf("x", "y"))
+        assertEquals(listOf("x", "y"), v.state.value.setup.positives)
+        assertEquals(listOf("n1"), v.state.value.setup.negatives)
+    }
+    @Test fun setLabelList_negative_changes_only_negatives() {
+        val v = vm(FakeClassifier(okResult()))
+        v.setMode(AggMode.CONTRAST)
+        v.setLabels(positives = listOf("p1"), negatives = listOf("n1"))
+        v.setLabelList(LabelTarget.NEGATIVE, listOf("z"))
+        assertEquals(listOf("p1"), v.state.value.setup.positives)
+        assertEquals(listOf("z"), v.state.value.setup.negatives)
+    }
 }

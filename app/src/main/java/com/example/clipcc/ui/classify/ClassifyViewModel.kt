@@ -95,6 +95,15 @@ class ClassifyViewModel(
     fun setMode(m: AggMode) = updateSetup { it.copy(mode = m) }
     fun setLabels(positives: List<String>, negatives: List<String>) =
         updateSetup { it.copy(positives = positives, negatives = negatives) }
+    /** Routes a committed list to the correct field (single tested seam for CSV-import targeting). */
+    fun setLabelList(target: LabelTarget, list: List<String>) {
+        val s = _state.value.setup
+        return when (target) {
+            LabelTarget.POSITIVE -> setLabels(list, s.negatives)
+            LabelTarget.NEGATIVE -> setLabels(s.positives, list)
+        }
+    }
+
     fun setTemporal(o: TemporalOptions) = updateSetup { it.copy(temporal = o) }
     fun setContrast(o: ContrastOptions) = updateSetup { it.copy(contrast = o) }
     // Picking the recommended value is NOT an override — it resumes tracking (clears the reset affordance).
