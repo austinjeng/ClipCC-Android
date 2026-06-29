@@ -42,4 +42,48 @@ class LabelCsvTest {
     @Test fun parse_empty_is_empty() {
         assertEquals(emptyList<String>(), LabelCsv.parse("").labels)
     }
+
+    private class TrackingStream(bytes: ByteArray) : java.io.ByteArrayInputStream(bytes) {
+        var closed = false
+        override fun close() { closed = true; super.close() }
+    }
+
+    @Test fun read_under_cap_passes_through() {
+        val r = LabelCsv.read("a\r\nb\rc\n".byteInputStream())
+        assertFalse(r.byteTruncated)
+        assertEquals("a\r\nb\rc\n", r.text)
+    }
+    @Test fun read_does_not_close_stream() {
+        val s = TrackingStream("a\nb\n".toByteArray())
+        LabelCsv.read(s)
+        assertFalse(s.closed)
+    }
+    @Test fun read_overflow_sets_truncated_and_keeps_whole_rows() {
+        val sb = StringBuilder()
+        while (sb.length <= LabelCsv.MAX_BYTES + 100) sb.append("abcdefghij\n")
+        val r = LabelCsv.read(sb.toString().byteInputStream())
+        assertTrue(r.byteTruncated)
+        assertTrue(r.text.endsWith("\n"))
+        assertTrue(r.text.toByteArray().size <= LabelCsv.MAX_BYTES)
+        r.text.split("\n").filter { it.isNotEmpty() }.forEach { assertEquals("abcdefghij", it) }
+    }
+    @Test fun read_giant_single_row_yields_empty() {
+        val sb = StringBuilder()
+        repeat(LabelCsv.MAX_BYTES + 10) { sb.append('x') }   // no line break at all
+        val r = LabelCsv.read(sb.toString().byteInputStream())
+        assertTrue(r.byteTruncated)
+        assertEquals("", r.text)
+    }
+    @Test fun read_overflow_drops_partial_multibyte_without_throwing() {
+        val sb = StringBuilder()
+        while (sb.toString().toByteArray().size < LabelCsv.MAX_BYTES - 1) sb.append("ab\n")
+        sb.append("€€€€")   // 3-byte EUR signs straddle the cap
+        val r = LabelCsv.read(sb.toString().byteInputStream())
+        assertTrue(r.byteTruncated)
+        assertFalse(r.text.contains("€"))  // tail after last newline dropped; no partial char
+    }
+    @Test(expected = java.nio.charset.CharacterCodingException::class)
+    fun read_invalid_utf8_throws() {
+        LabelCsv.read(byteArrayOf(0x61, 0xFF.toByte(), 0xFE.toByte()).inputStream())
+    }
 }
