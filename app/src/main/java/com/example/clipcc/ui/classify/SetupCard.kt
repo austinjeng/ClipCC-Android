@@ -17,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val EDIT_CAP = 50
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
@@ -77,11 +79,12 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
         }
 
         Text("Mode", style = MaterialTheme.typography.labelMedium)
+        val modes = ScoreView.visibleModes(state.contrastUnlocked, state.mode)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            AggMode.entries.forEachIndexed { i, m ->
+            modes.forEachIndexed { i, m ->
                 SegmentedButton(
                     selected = state.mode == m, onClick = { vm.setMode(m) }, enabled = !running,
-                    shape = SegmentedButtonDefaults.itemShape(i, AggMode.entries.size),
+                    shape = SegmentedButtonDefaults.itemShape(i, modes.size),
                 ) { Text(m.name.lowercase()) }
             }
         }
@@ -124,7 +127,12 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
             else -> {}
         }
 
-        state.validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.validationError?.let { err ->
+            Text(err, color = MaterialTheme.colorScheme.error)
+            if (err.startsWith("Duplicate label:")) {
+                TextButton(onClick = { vm.dedupeLabels() }, enabled = !running) { Text("Remove duplicates") }
+            }
+        }
         state.etaPerFrameMs?.let { Text("≈ ${it} ms/frame on this model+backend (captured estimate)",
             style = MaterialTheme.typography.bodySmall) }
     }
@@ -149,7 +157,7 @@ private fun LabelEditor(state: SetupState, vm: ClassifyViewModel, running: Boole
 @Composable
 private fun EditableList(items: List<String>, running: Boolean, onChange: (List<String>) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items.forEachIndexed { i, v ->
+        items.take(EDIT_CAP).forEachIndexed { i, v ->
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 OutlinedTextField(value = v, onValueChange = { nv ->
                     onChange(items.toMutableList().also { it[i] = nv })
@@ -158,7 +166,12 @@ private fun EditableList(items: List<String>, running: Boolean, onChange: (List<
                     enabled = !running) { Text("×") }
             }
         }
-        TextButton(onClick = { onChange(items + "") }, enabled = !running) { Text("+ Add label") }
+        if (items.size > EDIT_CAP) {
+            Text("+ ${items.size - EDIT_CAP} more imported labels",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            TextButton(onClick = { onChange(items + "") }, enabled = !running) { Text("+ Add label") }
+        }
     }
 }
 
