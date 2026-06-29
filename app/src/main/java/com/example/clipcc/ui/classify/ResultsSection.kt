@@ -1,46 +1,100 @@
 package com.example.clipcc.ui.classify
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.clipcc.ui.charts.BarChart
-import com.example.clipcc.ui.charts.ChartData
+import com.example.clipcc.engine.ScoreItem
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ResultsSection(success: RunState.Success) {
     val r = success.result
     val agg = r.result
+    val rows = remember(success) { ScoreView.ranked(agg.scores) }
+    var showAll by remember(success) { mutableStateOf(false) }
+    var expanded by remember(success) { mutableStateOf(emptySet<String>()) }
+
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ElevatedCard {
-            Column(Modifier.padding(16.dp)) {
-                Text("Best match", style = MaterialTheme.typography.labelMedium)
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("BEST MATCH", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
                 Text(agg.bestMatch.label, style = MaterialTheme.typography.headlineSmall)
-                Text("confidence ${"%.3f".format(agg.bestMatch.confidence)}")
-                Text("${r.meta.modelId} · ${r.meta.requestedBackend.label} · ${r.meta.frameCount} frames · " +
-                    "${r.meta.elapsedMs} ms · ${r.meta.scoreSemantics}",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(ScoreView.pct(agg.bestMatch.confidence), style = MaterialTheme.typography.titleLarge)
+                MeterBar(agg.bestMatch.confidence.toFloat())
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(r.meta.modelId, r.meta.requestedBackend.label, "${r.meta.frameCount}f",
+                        "${r.meta.elapsedMs} ms", r.meta.scoreSemantics).forEach { chip ->
+                        AssistChip(onClick = {},
+                            label = { Text(chip, style = MaterialTheme.typography.labelSmall) })
+                    }
+                }
                 Text("live node coverage not profiled — see Benchmark",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
             }
         }
 
-        Text("Confidence", style = MaterialTheme.typography.labelLarge)
-        BarChart(ChartData.confidenceBars(agg.scores), max = ChartData.UNIT_MAX,
-            barColor = MaterialTheme.colorScheme.primary, thresholdLine = ChartData.UNIT_MAX * 0.5f)
-
-        Text("Raw similarity (cosine)", style = MaterialTheme.typography.labelLarge)
-        val cos = ChartData.cosineBars(agg.scores)
-        BarChart(cos, max = ChartData.symmetricMax(cos.map { it.value }),
-            barColor = Color(0xFF7E57C2), zeroAtCenter = true)
-
-        agg.scores.forEach {
-            Text("${it.label}: conf ${"%.3f".format(it.confidence)}, cos ${"%.3f".format(it.rawSimilarity)}",
-                style = MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("All labels (${rows.size})", style = MaterialTheme.typography.labelLarge)
+            Text("by confidence", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline)
+        }
+        rows.take(if (showAll) ScoreView.MAX_ROWS else ScoreView.COLLAPSED).forEachIndexed { i, item ->
+            ScoreRow(i + 1, item, r.thumbnails, item.label in expanded) {
+                expanded = if (item.label in expanded) expanded - item.label else expanded + item.label
+            }
+        }
+        if (rows.size > ScoreView.COLLAPSED) {
+            TextButton(onClick = { showAll = !showAll }) {
+                Text(if (showAll) "⌃ show less"
+                     else "⌄ show ${minOf(rows.size, ScoreView.MAX_ROWS) - ScoreView.COLLAPSED} more")
+            }
+        }
+        if (showAll && rows.size > ScoreView.MAX_ROWS) {
+            Text("Top ${ScoreView.MAX_ROWS} of ${rows.size} — import fewer labels for full detail",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         }
 
         ModeExtras(r)
+    }
+}
+
+@Composable
+private fun ScoreRow(rank: Int, item: ScoreItem, thumbnails: Map<Int, Bitmap>,
+                     expanded: Boolean, onToggle: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable { onToggle() },
+        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("$rank", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline, modifier = Modifier.width(28.dp))
+            Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f))
+            Text(ScoreView.pct(item.confidence), style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium)
+        }
+        MeterBar(item.confidence.toFloat())
+        if (expanded) {
+            Text("cosine ${ScoreView.signedCos(item.rawSimilarity)}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item.peakFrameIndex?.let { idx ->
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    thumbnails[idx]?.let {
+                        Image(it.asImageBitmap(), contentDescription = "${item.label} peak frame",
+                            modifier = Modifier.size(72.dp))
+                    }
+                    Text("peak @ ${ScoreView.secs(item.approxTimestampSeconds ?: 0.0)}",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
     }
 }
