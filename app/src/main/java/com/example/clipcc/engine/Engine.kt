@@ -23,7 +23,10 @@ class Engine(
     private val backend: Backend = Backend.CPU_XNNPACK,
     private val visionBatch: Int = 1,
     private val config: BackendConfig = BackendConfig(),
+    private val precision: Precision = manifest.defaultPrecision,
 ) {
+    private val files = manifest.filesFor(precision)
+
     private fun itemBatch() = if (backend == Backend.CPU_EP) Int.MAX_VALUE else 1
 
     fun scoreFrames(bitmaps: List<Bitmap>, labels: List<String>): ScoreMatrices {
@@ -31,11 +34,11 @@ class Engine(
         val txt: Array<FloatArray> =
             HfTokenizer.fromJson(File("$modelDir/${manifest.tokenizerFile}").readBytes()).use { tk ->
                 val ids = labels.map { tk.encodePadded(it) }
-                OrtTower.open("$modelDir/${manifest.textFile}", env, backend, config).use { t ->
+                OrtTower.open("$modelDir/${files.textFile}", env, backend, config).use { t ->
                     t.encodeText(flatten(ids), labels.size, manifest.maxLength, minOf(itemBatch(), labels.size))
                 }
             }
-        return OrtTower.open("$modelDir/${manifest.visionFile}", env, backend, config).use { v ->
+        return OrtTower.open("$modelDir/${files.visionFile}", env, backend, config).use { v ->
             val pix = packFrames(bitmaps, manifest.resolution)
             val img = v.encodeVision(pix, bitmaps.size, manifest.resolution, effVisionBatch)
             Scoring.scoreMatrix(img, txt, manifest.logitScale, manifest.logitBias)
@@ -61,7 +64,7 @@ class Engine(
     fun encodeTextEmbeddings(labels: List<String>): Array<FloatArray> =
         HfTokenizer.fromJson(File("$modelDir/${manifest.tokenizerFile}").readBytes()).use { tk ->
             val ids = labels.map { tk.encodePadded(it) }
-            OrtTower.open("$modelDir/${manifest.textFile}", env, backend, config).use { t ->
+            OrtTower.open("$modelDir/${files.textFile}", env, backend, config).use { t ->
                 t.encodeText(flatten(ids), labels.size, manifest.maxLength, minOf(itemBatch(), labels.size))
             }
         }
@@ -80,5 +83,5 @@ class Engine(
 
     /** Open the vision tower for the duration of [block], releasing it afterward. */
     fun <R> withVisionEncoder(block: (VisionEncoder) -> R): R =
-        OrtTower.open("$modelDir/${manifest.visionFile}", env, backend, config).use { v -> block(VisionEncoder(v)) }
+        OrtTower.open("$modelDir/${files.visionFile}", env, backend, config).use { v -> block(VisionEncoder(v)) }
 }

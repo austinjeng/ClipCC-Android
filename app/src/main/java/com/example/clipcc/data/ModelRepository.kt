@@ -1,12 +1,15 @@
 package com.example.clipcc.data
 
 import com.example.clipcc.engine.ModelBundleManifest
+import com.example.clipcc.engine.Precision
 import com.example.clipcc.engine.ScoringPolicy
 import java.io.File
 
 data class ModelInfo(
     val id: String, val displayName: String, val resolution: Int, val precision: String,
     val scoreSemantics: String, val ready: Boolean, val reason: String?, val dir: String,
+    /** Precisions declared in the manifest whose vision+text files are actually present on disk. */
+    val availablePrecisions: List<Precision> = emptyList(),
 )
 
 /** Scans [modelsRoot]/<id>/manifest.json bundles. Readiness = parse + files-exist + size-match
@@ -26,10 +29,15 @@ class ModelRepository(private val modelsRoot: File) {
             return ModelInfo(dir.name, dir.name, 0, "", "", false, "bad manifest: ${t.message}", dir.absolutePath)
         }
         val reason = readinessReason(dir, m)
+        val avail = m.availablePrecisions.filter { p ->
+            val f = m.filesFor(p)
+            File(dir, f.visionFile).exists() && File(dir, f.textFile).exists()
+        }
         return ModelInfo(
             id = dir.name, displayName = m.displayName, resolution = m.resolution,
             precision = m.precision, scoreSemantics = m.scoreSemantics,
             ready = reason == null, reason = reason, dir = dir.absolutePath,
+            availablePrecisions = avail,
         )
     }
 

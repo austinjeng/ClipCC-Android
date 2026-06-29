@@ -2,7 +2,10 @@ package com.example.clipcc.ui.classify
 
 import android.graphics.Bitmap
 import com.example.clipcc.data.ModelInfo
+import com.example.clipcc.engine.AdviceLevel
 import com.example.clipcc.engine.AggregationResult
+import com.example.clipcc.engine.Precision
+import com.example.clipcc.engine.PrecisionAdvice
 import com.example.clipcc.engine.ScoringPolicy
 
 enum class AggMode { MEAN, MAX, TEMPORAL, CONTRAST }
@@ -23,7 +26,11 @@ data class ClassifyRequest(
     val modelDir: String, val modelId: String, val backend: UiBackend, val videoUriString: String,
     val labels: List<String>, val posCount: Int, val mode: AggMode,
     val temporal: TemporalOptions, val contrast: ContrastOptions,
+    val precision: Precision = Precision.FP16,
 )
+
+/** TEMPORAL/CONTRAST consume absolute sigmoid scores against thresholds; MEAN/MAX are argmax-only. */
+val AggMode.isThresholdMode: Boolean get() = this == AggMode.TEMPORAL || this == AggMode.CONTRAST
 data class RunMeta(
     val modelId: String, val requestedBackend: UiBackend,
     val frameCount: Int, val elapsedMs: Long, val scoreSemantics: String,
@@ -53,10 +60,19 @@ data class SetupState(
     val mode: AggMode = AggMode.MEAN,
     val temporal: TemporalOptions = TemporalOptions(),
     val contrast: ContrastOptions = ContrastOptions(),
+    val precision: Precision = Precision.INT8,
+    val precisionUserSet: Boolean = false,
+    /** True iff [precision] differs from the recommendation for the current mode — drives the reset
+     *  affordance + disclaimer. Distinct from [precisionUserSet] (which only gates tracking): picking the
+     *  recommended value, or a mode change that makes the choice coincide with the recommendation, is NOT
+     *  an override. */
+    val precisionOverridden: Boolean = false,
+    val precisionAdvice: PrecisionAdvice = PrecisionAdvice(AdviceLevel.NONE, ""),
     val validationError: String? = null,
     val etaPerFrameMs: Long? = null,
 ) {
     val selectedModel: ModelInfo? get() = availableModels.firstOrNull { it.id == selectedModelId }
+    val availablePrecisions: List<Precision> get() = selectedModel?.availablePrecisions ?: emptyList()
     val canRun: Boolean get() =
         selectedModel?.ready == true && videoUriString != null && validationError == null
 }

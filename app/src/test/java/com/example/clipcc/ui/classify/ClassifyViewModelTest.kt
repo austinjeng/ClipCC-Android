@@ -1,8 +1,10 @@
 package com.example.clipcc.ui.classify
 
 import com.example.clipcc.data.ModelInfo
+import com.example.clipcc.engine.AdviceLevel
 import com.example.clipcc.engine.AggregationResult
 import com.example.clipcc.engine.BestMatch
+import com.example.clipcc.engine.Precision
 import com.example.clipcc.engine.ScoreItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -107,5 +109,94 @@ class ClassifyViewModelTest {
         val v2 = ClassifyViewModel(FakeClassifier(okResult()), listOf(readyModel), { _, _ -> null }, dispatcher, handle)
         assertEquals(readyModel.id, v2.state.value.setup.selectedModelId)
         assertEquals(AggMode.MAX, v2.state.value.setup.mode)
+    }
+
+    // ---- precision policy wiring (T4) ----
+    private val multiModel = ModelInfo(
+        "siglip2-so400m-patch14-384", "So400m", 384, "fp16",
+        "siglip2_pairwise_sigmoid", ready = true, reason = null, dir = "/tmp/so",
+        availablePrecisions = listOf(Precision.FP32, Precision.FP16, Precision.INT8))
+
+    private fun vmMulti() = ClassifyViewModel(
+        FakeClassifier(okResult()), listOf(multiModel), { _, _ -> null }, dispatcher,
+    ).apply { selectModel(multiModel.id); setVideo("content://v/1", "c.mp4", true) }
+
+    @Test fun precision_defaults_to_recommended_by_mode() {
+        val v = vmMulti()
+        assertEquals(Precision.INT8, v.state.value.setup.precision)           // MEAN → int8
+        assertEquals(AdviceLevel.NONE, v.state.value.setup.precisionAdvice.level)
+        v.setMode(AggMode.TEMPORAL)
+        assertEquals(Precision.FP16, v.state.value.setup.precision)           // tracks → fp16
+        assertFalse(v.state.value.setup.precisionUserSet)
+    }
+
+    @Test fun manual_override_sticks_across_mode_change() {
+        val v = vmMulti()                                                    // MEAN, recommends int8
+        v.setPrecision(Precision.FP32)                                       // fp32 is never recommended
+        assertTrue(v.state.value.setup.precisionOverridden)
+        v.setMode(AggMode.TEMPORAL)
+        assertEquals(Precision.FP32, v.state.value.setup.precision)           // override sticks
+        assertTrue(v.state.value.setup.precisionOverridden)
+    }
+
+    @Test fun int8_in_threshold_mode_is_overridden_and_warns() {
+        val v = vmMulti()
+        v.setMode(AggMode.TEMPORAL)                                           // recommends fp16
+        v.setPrecision(Precision.INT8)
+        assertTrue(v.state.value.setup.precisionOverridden)
+        assertEquals(AdviceLevel.WARN, v.state.value.setup.precisionAdvice.level)
+    }
+
+    // ---- the reported bug: re-picking the recommended value must clear the reset affordance ----
+    @Test fun picking_recommended_precision_directly_is_not_overridden() {
+        val v = vmMulti()                                                    // MEAN, recommends int8
+        v.setPrecision(Precision.FP32)
+        assertTrue(v.state.value.setup.precisionOverridden)
+        v.setPrecision(Precision.INT8)                                       // recommended value, not via reset
+        assertFalse("recommended pick must not show the reset", v.state.value.setup.precisionOverridden)
+        assertFalse(v.state.value.setup.precisionUserSet)                    // resumes tracking
+    }
+
+    @Test fun mode_change_making_choice_equal_recommendation_clears_override() {
+        val v = vmMulti()
+        v.setMode(AggMode.TEMPORAL)                                           // recommends fp16
+        v.setPrecision(Precision.INT8)                                        // override
+        assertTrue(v.state.value.setup.precisionOverridden)
+        v.setMode(AggMode.MEAN)                                               // int8 IS recommended here
+        assertFalse(v.state.value.setup.precisionOverridden)                  // coincidence → no reset shown
+    }
+
+    @Test fun reset_precision_returns_to_recommendation() {
+        val v = vmMulti()
+        v.setMode(AggMode.TEMPORAL); v.setPrecision(Precision.INT8)
+        v.resetPrecision()
+        assertFalse(v.state.value.setup.precisionUserSet)
+        assertEquals(Precision.FP16, v.state.value.setup.precision)
+    }
+
+    @Test fun so400m_fp32_override_warns_ram() {
+        val v = vmMulti()
+        v.setPrecision(Precision.FP32)
+        val advice = v.state.value.setup.precisionAdvice
+        assertEquals(AdviceLevel.WARN, advice.level)
+        assertTrue(advice.text.contains("RAM"))
+    }
+
+    @Test fun recommendation_clamps_to_available_precisions() {
+        val fp16Only = multiModel.copy(availablePrecisions = listOf(Precision.FP16))
+        val v = ClassifyViewModel(FakeClassifier(okResult()), listOf(fp16Only), { _, _ -> null }, dispatcher)
+            .apply { selectModel(fp16Only.id) }
+        assertEquals(Precision.FP16, v.state.value.setup.precision)           // MEAN→int8 clamps to fp16
+    }
+
+    @Test fun run_passes_selected_precision_to_request() = runTest(dispatcher) {
+        var captured: ClassifyRequest? = null
+        val v = ClassifyViewModel(
+            FakeClassifier(okResult()) { req, _, _ -> captured = req }, listOf(multiModel),
+            { _, _ -> null }, dispatcher,
+        ).apply { selectModel(multiModel.id); setVideo("content://v/1", "c.mp4", true) }
+        v.setPrecision(Precision.FP32)
+        v.run(); advanceUntilIdle()
+        assertEquals(Precision.FP32, captured!!.precision)
     }
 }

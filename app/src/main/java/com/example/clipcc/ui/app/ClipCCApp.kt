@@ -43,7 +43,11 @@ private fun ClassifyTab(onKeepAwake: (Boolean) -> Unit) {
     val appCtx = LocalContext.current.applicationContext
     val vm: ClassifyViewModel = viewModel(factory = viewModelFactory {
         initializer {
-            val models = ModelRepository(File(appCtx.filesDir, "models")).scan()
+            // Scan the app's external files dir (adb-pushable: /sdcard/Android/data/<pkg>/files/models),
+            // falling back to internal storage. ponytail: external dir makes `adb push` provisioning work
+            // directly — no run-as/stream dance.
+            val modelsRoot = File(appCtx.getExternalFilesDir(null) ?: appCtx.filesDir, "models")
+            val models = ModelRepository(modelsRoot).scan()
             val groups = BenchmarkData.parse(
                 appCtx.assets.open("phase2-benchmark-result.json").bufferedReader().use { it.readText() })
             val lookup: (String, UiBackend) -> Double? = { id, backend ->
