@@ -49,6 +49,8 @@ class ClassifyViewModel(
             precision = savedState.get<String>("precision")
                 ?.let { runCatching { Precision.valueOf(it) }.getOrNull() } ?: Precision.INT8,
             precisionUserSet = savedState["precisionUserSet"] ?: false,
+            contrastUnlocked = savedState["contrastUnlocked"] ?: false,
+            temporalTaps = savedState["temporalTaps"] ?: 0,
         )
         _state.value = ClassifyUiState(setup = withDerived(restored))
     }
@@ -70,6 +72,8 @@ class ClassifyViewModel(
         savedState["negatives"] = ArrayList(s.negatives)
         savedState["precision"] = s.precision.name
         savedState["precisionUserSet"] = s.precisionUserSet
+        savedState["contrastUnlocked"] = s.contrastUnlocked
+        savedState["temporalTaps"] = s.temporalTaps
     }
 
     private fun withDerived(s: SetupState): SetupState {
@@ -92,7 +96,13 @@ class ClassifyViewModel(
     fun setBackend(b: UiBackend) = updateSetup { it.copy(backend = b) }
     fun setVideo(uriString: String, name: String, granted: Boolean) =
         updateSetup { it.copy(videoUriString = uriString, videoName = name, grantPersisted = granted) }
-    fun setMode(m: AggMode) = updateSetup { it.copy(mode = m) }
+    fun setMode(m: AggMode) = updateSetup {
+        if (m == AggMode.TEMPORAL) {
+            val taps = it.temporalTaps + 1
+            it.copy(mode = m, temporalTaps = taps,
+                contrastUnlocked = it.contrastUnlocked || taps >= CONTRAST_UNLOCK_TAPS)
+        } else it.copy(mode = m)
+    }
     fun setLabels(positives: List<String>, negatives: List<String>) =
         updateSetup { it.copy(positives = positives, negatives = negatives) }
     /** Routes a committed list to the correct field (single tested seam for CSV-import targeting). */
@@ -102,6 +112,15 @@ class ClassifyViewModel(
             LabelTarget.POSITIVE -> setLabels(list, s.negatives)
             LabelTarget.NEGATIVE -> setLabels(s.positives, list)
         }
+    }
+
+    /** Repair for a duplicate error: drop non-blank labels whose normalize was already seen earlier
+     *  in positives++negatives scan order (the order LabelValidation scans); blanks preserved. */
+    fun dedupeLabels() = updateSetup {
+        val seen = HashSet<String>()
+        fun keep(s: String): Boolean { val n = LabelValidation.normalize(s); return n.isEmpty() || seen.add(n) }
+        it.copy(positives = it.positives.filter { s -> keep(s) },
+            negatives = it.negatives.filter { s -> keep(s) })
     }
 
     fun setTemporal(o: TemporalOptions) = updateSetup { it.copy(temporal = o) }
@@ -156,4 +175,6 @@ class ClassifyViewModel(
     }
 
     fun reset() { _state.value = _state.value.copy(run = RunState.Idle) }
+
+    companion object { const val CONTRAST_UNLOCK_TAPS = 20 }
 }
