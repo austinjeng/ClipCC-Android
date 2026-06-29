@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,11 +102,14 @@ private fun LabelEditor(state: SetupState, vm: ClassifyViewModel, running: Boole
     if (state.mode == AggMode.CONTRAST) {
         Text("Positive labels", style = MaterialTheme.typography.labelMedium)
         EditableList(state.positives, running) { vm.setLabels(it, state.negatives) }
+        ImportCsvButton(LabelTarget.POSITIVE, vm, running)
         Text("Negative labels", style = MaterialTheme.typography.labelMedium)
         EditableList(state.negatives, running) { vm.setLabels(state.positives, it) }
+        ImportCsvButton(LabelTarget.NEGATIVE, vm, running)
     } else {
         Text("Labels", style = MaterialTheme.typography.labelMedium)
         EditableList(state.positives, running) { vm.setLabels(it, state.negatives) }
+        ImportCsvButton(LabelTarget.POSITIVE, vm, running)
     }
 }
 
@@ -160,4 +166,85 @@ private fun NumberField(label: String, value: Double, running: Boolean, onChange
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+private data class ImportPreview(
+    val read: LabelCsv.Read,
+    val parsed: LabelCsv.Parsed,
+    val append: LabelCsv.Merged,
+    val existingCount: Int,
+)
+
+@Composable
+private fun ImportCsvButton(target: LabelTarget, vm: ClassifyViewModel, running: Boolean) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var preview by remember { mutableStateOf<ImportPreview?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val res = withContext(Dispatchers.IO) {
+                runCatching {
+                    val read = ctx.contentResolver.openInputStream(uri)?.use { LabelCsv.read(it) }
+                        ?: error("null stream")
+                    read to LabelCsv.parse(read.text)
+                }
+            }
+            res.fold(
+                onSuccess = { (read, parsed) ->
+                    if (parsed.labels.isEmpty()) {
+                        notice = LabelCsv.zeroNotice(read, parsed); preview = null
+                    } else {
+                        val s = vm.state.value.setup
+                        val current = if (target == LabelTarget.POSITIVE) s.positives else s.negatives
+                        notice = null
+                        preview = ImportPreview(
+                            read, parsed,
+                            LabelCsv.merge(current, parsed.labels, replace = false), current.size)
+                    }
+                },
+                onFailure = { notice = "Couldn't read file (not valid text)"; preview = null },
+            )
+        }
+    }
+
+    TextButton(
+        onClick = {
+            notice = null
+            picker.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "text/*"))
+        },
+        enabled = !running,
+    ) { Text("Import CSV") }
+
+    notice?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+
+    preview?.let { p ->
+        AlertDialog(
+            onDismissRequest = { preview = null },
+            title = { Text("Import ${p.parsed.labels.size} labels") },
+            text = {
+                val extra = (if (p.read.byteTruncated || p.parsed.labelTruncated) " File was truncated." else "") +
+                    (if (p.parsed.dropped > 0) " ${p.parsed.dropped} row(s) too long, skipped." else "")
+                Text("Append to the current ${p.existingCount}, or replace them?$extra")
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        vm.setLabelList(target, p.append.labels)
+                        notice = LabelCsv.appendNotice(p.read, p.parsed, p.append); preview = null
+                    }) { Text("Append (${p.append.inserted} new)") }
+                    TextButton(onClick = {
+                        vm.setLabelList(target, p.parsed.labels)
+                        notice = LabelCsv.replaceNotice(p.read, p.parsed); preview = null
+                    }) { Text("Replace") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { preview = null }) { Text("Cancel") } },
+        )
+    }
 }
