@@ -1,14 +1,13 @@
 package com.example.clipcc.ui.classify
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.clipcc.engine.ScoreItem
 import com.example.clipcc.ui.charts.TimelineChart
 import com.example.clipcc.ui.charts.TimelineBand
 import com.example.clipcc.ui.charts.TimelineSeries
@@ -19,52 +18,69 @@ fun ModeExtras(r: RunResult) {
     when {
         agg.temporal != null -> TemporalExtras(r)
         agg.contrast != null -> ContrastExtras(agg.contrast!!)
-        agg.scores.any { it.peakFrameIndex != null } -> MaxExtras(r)
         else -> {}
-    }
-}
-
-@Composable
-private fun MaxExtras(r: RunResult) {
-    Text("Peak frames", style = MaterialTheme.typography.labelLarge)
-    r.result.scores.forEach { s: ScoreItem ->
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            s.peakFrameIndex?.let { idx ->
-                r.thumbnails[idx]?.let { Image(it.asImageBitmap(), contentDescription = "${s.label} peak frame",
-                    modifier = Modifier.size(72.dp)) }
-            }
-            Text("${s.label} @ ${"%.1f".format(s.approxTimestampSeconds ?: 0.0)}s")
-        }
     }
 }
 
 @Composable
 private fun TemporalExtras(r: RunResult) {
     val t = r.result.temporal!!
-    val labels = r.result.scores.map { it.label }
-    val palette = listOf(Color(0xFF1565C0), Color(0xFFEF6C00), Color(0xFF2E7D32), Color(0xFFC62828))
-    val series = labels.mapIndexed { i, lbl ->
-        TimelineSeries(lbl, palette[i % palette.size],
-            t.timeline.map { fr -> (fr.scores[lbl] ?: 0.0).toFloat() })
+    val shown = ScoreView.topActiveLabels(t.labelSummaries, ScoreView.TIMELINE_SERIES)
+    if (shown.isEmpty()) {
+        Text("No segments met threshold ${ScoreView.pct(t.effectiveThreshold)}",
+            style = MaterialTheme.typography.bodyMedium)
+        return
     }
-    val bands = t.segments.map { seg ->
-        val li = labels.indexOf(seg.label).coerceAtLeast(0)
-        val total = (t.timeline.lastOrNull()?.timestamp ?: 1.0).coerceAtLeast(1e-6)
-        TimelineBand(palette[li % palette.size], (seg.startTime / total).toFloat(), (seg.endTime / total).toFloat())
+    val palette = listOf(Color(0xFF1565C0), Color(0xFFEF6C00), Color(0xFF2E7D32),
+        Color(0xFFC62828), Color(0xFF6A1B9A), Color(0xFF00838F))
+    val colorOf = shown.withIndex().associate { (i, lbl) -> lbl to palette[i % palette.size] }
+    val series = shown.map { lbl ->
+        TimelineSeries(lbl, colorOf.getValue(lbl), t.timeline.map { fr -> (fr.scores[lbl] ?: 0.0).toFloat() })
     }
+    val total = (t.timeline.lastOrNull()?.timestamp ?: 1.0).coerceAtLeast(1e-6)
+    val bands = t.segments.filter { it.label in colorOf }.map { seg ->
+        TimelineBand(colorOf.getValue(seg.label),
+            (seg.startTime / total).toFloat(), (seg.endTime / total).toFloat())
+    }
+
     Text("Timeline", style = MaterialTheme.typography.labelLarge)
+    Text("threshold ${ScoreView.pct(t.effectiveThreshold)}${if (t.thresholdWasDefaulted) " (default)" else ""}",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
     TimelineChart(series, threshold = t.effectiveThreshold.toFloat(), bands = bands)
+
     Text("Segments", style = MaterialTheme.typography.labelLarge)
-    t.segments.forEach { seg ->
-        Text("${seg.label}: ${"%.1f".format(seg.startTime)}–${"%.1f".format(seg.endTime)}s " +
-            "(${"%.1f".format(seg.duration)}s, peak ${"%.3f".format(seg.peakConfidence)})",
-            style = MaterialTheme.typography.bodySmall)
+    t.segments.sortedByDescending { it.peakConfidence }.take(ScoreView.SEGMENT_ROWS).forEach { seg ->
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(seg.label, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                Text("${ScoreView.secs(seg.startTime)}–${ScoreView.secs(seg.endTime)} · ${ScoreView.secs(seg.duration)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) { MeterBar(seg.peakConfidence.toFloat()) }
+                Text(ScoreView.pct(seg.peakConfidence), style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
+    if (t.segments.size > ScoreView.SEGMENT_ROWS) {
+        Text("… ${t.segments.size - ScoreView.SEGMENT_ROWS} more segments",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+    }
+
     Text("Label summaries", style = MaterialTheme.typography.labelLarge)
-    t.labelSummaries.forEach { ls ->
-        Text("${ls.label}: ${ls.segmentCount} seg, active ${"%.1f".format(ls.totalActiveDuration)}s, " +
-            "DWC ${"%.3f".format(ls.durationWeightedConfidence)}", style = MaterialTheme.typography.bodySmall)
+    ScoreView.topSummaries(t.labelSummaries, ScoreView.SUMMARY_ROWS).forEach { ls ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(ls.label, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("${ls.segmentCount} seg · active ${ScoreView.secs(ls.totalActiveDuration)}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.width(80.dp)) { MeterBar(ls.durationWeightedConfidence.toFloat()) }
+            Text(ScoreView.pct(ls.durationWeightedConfidence), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    val activeCount = t.labelSummaries.count { it.segmentCount > 0 }
+    if (activeCount > ScoreView.SUMMARY_ROWS) {
+        Text("… ${activeCount - ScoreView.SUMMARY_ROWS} more labels",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
     }
 }
 
