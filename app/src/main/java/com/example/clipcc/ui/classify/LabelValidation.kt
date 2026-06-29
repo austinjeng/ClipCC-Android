@@ -5,9 +5,12 @@ package com.example.clipcc.ui.classify
 data class LabelCheck(val cleaned: List<String>, val posCount: Int, val error: String?)
 
 object LabelValidation {
+    /** The one canonicalization rule shared by parse/merge/validate: trim only, case-preserving. */
+    fun normalize(s: String): String = s.trim()
+
     fun validate(positives: List<String>, negatives: List<String>, contrast: Boolean): LabelCheck {
-        val pos = positives.map { it.trim() }.filter { it.isNotEmpty() }
-        val neg = negatives.map { it.trim() }.filter { it.isNotEmpty() }
+        val pos = positives.map { normalize(it) }.filter { it.isNotEmpty() }
+        val neg = negatives.map { normalize(it) }.filter { it.isNotEmpty() }
 
         if (!contrast) {
             if (pos.isEmpty()) return LabelCheck(emptyList(), 0, "Add at least one label")
