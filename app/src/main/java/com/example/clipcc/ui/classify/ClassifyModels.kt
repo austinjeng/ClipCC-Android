@@ -6,6 +6,7 @@ import com.example.clipcc.engine.AggregationResult
 import com.example.clipcc.engine.ScoringPolicy
 
 enum class AggMode { MEAN, MAX, TEMPORAL, CONTRAST }
+enum class LabelTarget { POSITIVE, NEGATIVE }
 
 data class TemporalOptions(
     val threshold: Double = ScoringPolicy.THRESHOLD,
