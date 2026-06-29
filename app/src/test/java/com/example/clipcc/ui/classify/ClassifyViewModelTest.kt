@@ -216,4 +216,35 @@ class ClassifyViewModelTest {
         assertEquals(listOf("p1"), v.state.value.setup.positives)
         assertEquals(listOf("z"), v.state.value.setup.negatives)
     }
+
+    @Test fun temporal_taps_unlock_contrast_at_threshold() {
+        val v = vm(FakeClassifier(okResult()))
+        repeat(ClassifyViewModel.CONTRAST_UNLOCK_TAPS - 1) { v.setMode(AggMode.TEMPORAL) }
+        assertFalse(v.state.value.setup.contrastUnlocked)
+        v.setMode(AggMode.TEMPORAL)
+        assertTrue(v.state.value.setup.contrastUnlocked)
+    }
+    @Test fun non_temporal_taps_do_not_unlock() {
+        val v = vm(FakeClassifier(okResult()))
+        repeat(30) { v.setMode(AggMode.MAX); v.setMode(AggMode.MEAN) }
+        assertFalse(v.state.value.setup.contrastUnlocked)
+    }
+    @Test fun contrast_unlock_restored_from_saved_state() {
+        val handle = androidx.lifecycle.SavedStateHandle()
+        val v1 = ClassifyViewModel(FakeClassifier(okResult()), listOf(readyModel), { _, _ -> null }, dispatcher, handle)
+        repeat(ClassifyViewModel.CONTRAST_UNLOCK_TAPS) { v1.setMode(AggMode.TEMPORAL) }
+        val v2 = ClassifyViewModel(FakeClassifier(okResult()), listOf(readyModel), { _, _ -> null }, dispatcher, handle)
+        assertTrue(v2.state.value.setup.contrastUnlocked)
+        assertEquals(ClassifyViewModel.CONTRAST_UNLOCK_TAPS, v2.state.value.setup.temporalTaps)
+    }
+    @Test fun dedupeLabels_drops_later_dups_keeps_blanks_and_clears_error() {
+        val v = vm(FakeClassifier(okResult()))
+        v.setMode(AggMode.CONTRAST)
+        v.setLabels(positives = listOf("cat", "dog", ""), negatives = listOf("cat", "bird"))
+        assertEquals("Duplicate label: cat", v.state.value.setup.validationError)
+        v.dedupeLabels()
+        assertEquals(listOf("cat", "dog", ""), v.state.value.setup.positives)  // blank kept, first cat kept
+        assertEquals(listOf("bird"), v.state.value.setup.negatives)            // later cat dropped
+        assertNull(v.state.value.setup.validationError)
+    }
 }

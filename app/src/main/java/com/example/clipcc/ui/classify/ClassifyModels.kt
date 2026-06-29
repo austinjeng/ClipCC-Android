@@ -63,6 +63,8 @@ data class SetupState(
     val contrast: ContrastOptions = ContrastOptions(),
     val precision: Precision = Precision.INT8,
     val precisionUserSet: Boolean = false,
+    val contrastUnlocked: Boolean = false,
+    val temporalTaps: Int = 0,
     /** True iff [precision] differs from the recommendation for the current mode — drives the reset
      *  affordance + disclaimer. Distinct from [precisionUserSet] (which only gates tracking): picking the
      *  recommended value, or a mode change that makes the choice coincide with the recommendation, is NOT
