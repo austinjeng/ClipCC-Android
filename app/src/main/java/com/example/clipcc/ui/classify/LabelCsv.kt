@@ -59,6 +59,15 @@ object LabelCsv {
         return Parsed(out, labelTruncated, dropped)
     }
 
+    data class Merged(val labels: List<String>, val inserted: Int)
+
+    fun merge(existing: List<String>, parsed: List<String>, replace: Boolean): Merged {
+        if (replace) return Merged(parsed, parsed.size)
+        val have = existing.mapTo(HashSet()) { LabelValidation.normalize(it) }
+        val added = parsed.filter { have.add(LabelValidation.normalize(it)) }
+        return Merged(existing + added, added.size)
+    }
+
     /** Strip one surrounding pair of double quotes and unescape "" -> " (RFC-4180 single column). */
     private fun unquote(s: String): String =
         if (s.length >= 2 && s.first() == '"' && s.last() == '"')

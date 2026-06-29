@@ -86,4 +86,20 @@ class LabelCsvTest {
     fun read_invalid_utf8_throws() {
         LabelCsv.read(byteArrayOf(0x61, 0xFF.toByte(), 0xFE.toByte()).inputStream())
     }
+
+    @Test fun merge_replace_overwrites() {
+        val m = LabelCsv.merge(listOf("old"), listOf("a", "b"), replace = true)
+        assertEquals(listOf("a", "b"), m.labels)
+        assertEquals(2, m.inserted)
+    }
+    @Test fun merge_append_skips_dups_including_whitespace_variants() {
+        val m = LabelCsv.merge(listOf(" car "), listOf("car", "dog"), replace = false)
+        assertEquals(listOf(" car ", "dog"), m.labels)  // existing kept verbatim; "car" skipped
+        assertEquals(1, m.inserted)
+    }
+    @Test fun merge_append_into_empty() {
+        val m = LabelCsv.merge(emptyList(), listOf("a"), replace = false)
+        assertEquals(listOf("a"), m.labels)
+        assertEquals(1, m.inserted)
+    }
 }
