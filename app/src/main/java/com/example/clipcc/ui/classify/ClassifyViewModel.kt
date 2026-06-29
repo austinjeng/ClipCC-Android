@@ -119,8 +119,11 @@ class ClassifyViewModel(
     fun dedupeLabels() = updateSetup {
         val seen = HashSet<String>()
         fun keep(s: String): Boolean { val n = LabelValidation.normalize(s); return n.isEmpty() || seen.add(n) }
-        it.copy(positives = it.positives.filter { s -> keep(s) },
-            negatives = it.negatives.filter { s -> keep(s) })
+        // positives MUST be filtered before negatives (shared seen-set) to mirror LabelValidation's
+        // pos++neg scan order, so the first occurrence wins exactly as the validator detects the dup.
+        val newPositives = it.positives.filter { s -> keep(s) }
+        val newNegatives = it.negatives.filter { s -> keep(s) }
+        it.copy(positives = newPositives, negatives = newNegatives)
     }
 
     fun setTemporal(o: TemporalOptions) = updateSetup { it.copy(temporal = o) }

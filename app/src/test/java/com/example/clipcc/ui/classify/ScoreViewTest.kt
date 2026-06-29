@@ -13,9 +13,10 @@ class ScoreViewTest {
         val r = ScoreView.ranked(listOf(s("a", 0.2), s("b", 0.9), s("c", 0.9), s("d", 0.5)))
         assertEquals(listOf("b", "c", "d", "a"), r.map { it.label })   // b before c (stable tie)
     }
-    @Test fun ranked_take_caps_a_thousand_at_MAX_ROWS() {
+    @Test fun ranked_returns_all_items_caller_caps() {
         val many = (1..1000).map { s("l$it", it / 1000.0) }
-        assertEquals(50, ScoreView.ranked(many).take(ScoreView.MAX_ROWS).size)
+        assertEquals(1000, ScoreView.ranked(many).size)                          // ranked returns all
+        assertEquals(50, ScoreView.ranked(many).take(ScoreView.MAX_ROWS).size)   // caller bounds it
     }
     @Test fun pct_signedCos_secs_use_us_locale() {
         val def = Locale.getDefault()
@@ -48,6 +49,10 @@ class ScoreViewTest {
         assertTrue(AggMode.CONTRAST in ScoreView.visibleModes(false, AggMode.CONTRAST))
     }
     @Test fun constants_are_fixed() {
-        assertEquals(5, ScoreView.COLLAPSED); assertEquals(50, ScoreView.MAX_ROWS)
+        assertEquals(5, ScoreView.COLLAPSED)
+        assertEquals(50, ScoreView.MAX_ROWS)
+        assertEquals(6, ScoreView.TIMELINE_SERIES)
+        assertEquals(20, ScoreView.SUMMARY_ROWS)
+        assertEquals(50, ScoreView.SEGMENT_ROWS)
     }
 }

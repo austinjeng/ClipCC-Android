@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,11 +31,15 @@ fun ResultsSection(success: RunState.Success) {
                 Text(agg.bestMatch.label, style = MaterialTheme.typography.headlineSmall)
                 Text(ScoreView.pct(agg.bestMatch.confidence), style = MaterialTheme.typography.titleLarge)
                 MeterBar(agg.bestMatch.confidence.toFloat())
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(r.meta.modelId, r.meta.requestedBackend.label, "${r.meta.frameCount}f",
                         "${r.meta.elapsedMs} ms", r.meta.scoreSemantics).forEach { chip ->
-                        AssistChip(onClick = {},
-                            label = { Text(chip, style = MaterialTheme.typography.labelSmall) })
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp)) {
+                            Text(chip, style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        }
                     }
                 }
                 Text("live node coverage not profiled — see Benchmark",
@@ -91,8 +96,9 @@ private fun ScoreRow(rank: Int, item: ScoreItem, thumbnails: Map<Int, Bitmap>,
                         Image(it.asImageBitmap(), contentDescription = "${item.label} peak frame",
                             modifier = Modifier.size(72.dp))
                     }
-                    Text("peak @ ${ScoreView.secs(item.approxTimestampSeconds ?: 0.0)}",
-                        style = MaterialTheme.typography.bodySmall)
+                    item.approxTimestampSeconds?.let { ts ->
+                        Text("peak @ ${ScoreView.secs(ts)}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }

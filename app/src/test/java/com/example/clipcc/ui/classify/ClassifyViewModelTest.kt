@@ -235,6 +235,7 @@ class ClassifyViewModelTest {
         repeat(ClassifyViewModel.CONTRAST_UNLOCK_TAPS) { v1.setMode(AggMode.TEMPORAL) }
         val v2 = ClassifyViewModel(FakeClassifier(okResult()), listOf(readyModel), { _, _ -> null }, dispatcher, handle)
         assertTrue(v2.state.value.setup.contrastUnlocked)
+        assertEquals(ClassifyViewModel.CONTRAST_UNLOCK_TAPS, v2.state.value.setup.temporalTaps)
     }
     @Test fun dedupeLabels_drops_later_dups_keeps_blanks_and_clears_error() {
         val v = vm(FakeClassifier(okResult()))
