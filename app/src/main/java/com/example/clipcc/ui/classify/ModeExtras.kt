@@ -49,7 +49,9 @@ private fun TemporalExtras(r: RunResult) {
     TimelineChart(series, threshold = t.effectiveThreshold.toFloat(), bands = bands)
 
     Text("Segments", style = MaterialTheme.typography.labelLarge)
-    t.segments.sortedByDescending { it.peakConfidence }.take(ScoreView.SEGMENT_ROWS).forEach { seg ->
+    val segs = t.segments.sortedByDescending { it.peakConfidence }
+    val maxPeak = segs.firstOrNull()?.peakConfidence ?: 0.0   // relative meter, like main results (SigLIP2 sigmoid is near-zero)
+    segs.take(ScoreView.SEGMENT_ROWS).forEach { seg ->
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(seg.label, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
@@ -57,7 +59,7 @@ private fun TemporalExtras(r: RunResult) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f)) { MeterBar(seg.peakConfidence.toFloat()) }
+                Box(Modifier.weight(1f)) { MeterBar(ScoreView.meter(seg.peakConfidence, maxPeak)) }
                 Text(ScoreView.pct(seg.peakConfidence), style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -68,12 +70,14 @@ private fun TemporalExtras(r: RunResult) {
     }
 
     Text("Label summaries", style = MaterialTheme.typography.labelLarge)
-    ScoreView.topSummaries(t.labelSummaries, ScoreView.SUMMARY_ROWS).forEach { ls ->
+    val summaries = ScoreView.topSummaries(t.labelSummaries, ScoreView.SUMMARY_ROWS)
+    val maxDwc = summaries.firstOrNull()?.durationWeightedConfidence ?: 0.0   // relative meter, like main results
+    summaries.forEach { ls ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(ls.label, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Text("${ls.segmentCount} seg · active ${ScoreView.secs(ls.totalActiveDuration)}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Box(Modifier.width(80.dp)) { MeterBar(ls.durationWeightedConfidence.toFloat()) }
+            Box(Modifier.width(80.dp)) { MeterBar(ScoreView.meter(ls.durationWeightedConfidence, maxDwc)) }
             Text(ScoreView.pct(ls.durationWeightedConfidence), style = MaterialTheme.typography.bodySmall)
         }
     }

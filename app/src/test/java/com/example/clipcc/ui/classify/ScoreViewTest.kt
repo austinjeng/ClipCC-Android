@@ -18,6 +18,17 @@ class ScoreViewTest {
         assertEquals(1000, ScoreView.ranked(many).size)                          // ranked returns all
         assertEquals(50, ScoreView.ranked(many).take(ScoreView.MAX_ROWS).size)   // caller bounds it
     }
+    @Test fun meter_is_fraction_of_max() {
+        assertEquals(0.5f, ScoreView.meter(0.5, 1.0), 0f)
+        assertEquals(1.0f, ScoreView.meter(0.9, 0.9), 0f)   // top label fills the bar
+        assertEquals(0.25f, ScoreView.meter(0.0003, 0.0012), 1e-6f)  // SigLIP2 near-zero confidences
+    }
+    @Test fun meter_guards_div_zero_and_clamps() {
+        assertEquals(0f, ScoreView.meter(0.5, 0.0), 0f)     // max==0 → 0, no NaN/Inf
+        assertEquals(0f, ScoreView.meter(0.5, -1.0), 0f)    // negative max → 0
+        assertEquals(1f, ScoreView.meter(2.0, 1.0), 0f)     // over-max coerced to 1
+        assertEquals(0f, ScoreView.meter(-0.5, 1.0), 0f)    // negative coerced to 0
+    }
     @Test fun pct_signedCos_secs_use_us_locale() {
         val def = Locale.getDefault()
         try {
