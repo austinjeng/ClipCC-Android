@@ -20,6 +20,7 @@ fun ResultsSection(success: RunState.Success) {
     val r = success.result
     val agg = r.result
     val rows = remember(success) { ScoreView.ranked(agg.scores) }
+    val maxConf = rows.firstOrNull()?.confidence ?: 0.0   // Python parity: bars are relative to the top label
     var showAll by remember(success) { mutableStateOf(false) }
     var expanded by remember(success) { mutableStateOf(emptySet<String>()) }
 
@@ -30,7 +31,7 @@ fun ResultsSection(success: RunState.Success) {
                     color = MaterialTheme.colorScheme.primary)
                 Text(agg.bestMatch.label, style = MaterialTheme.typography.headlineSmall)
                 Text(ScoreView.pct(agg.bestMatch.confidence), style = MaterialTheme.typography.titleLarge)
-                MeterBar(agg.bestMatch.confidence.toFloat())
+                MeterBar(ScoreView.meter(agg.bestMatch.confidence, maxConf))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(r.meta.modelId, r.meta.requestedBackend.label, "${r.meta.frameCount}f",
@@ -53,7 +54,7 @@ fun ResultsSection(success: RunState.Success) {
                 color = MaterialTheme.colorScheme.outline)
         }
         rows.take(if (showAll) ScoreView.MAX_ROWS else ScoreView.COLLAPSED).forEachIndexed { i, item ->
-            ScoreRow(i + 1, item, r.thumbnails, item.label in expanded) {
+            ScoreRow(i + 1, item, maxConf, r.thumbnails, item.label in expanded) {
                 expanded = if (item.label in expanded) expanded - item.label else expanded + item.label
             }
         }
@@ -73,7 +74,7 @@ fun ResultsSection(success: RunState.Success) {
 }
 
 @Composable
-private fun ScoreRow(rank: Int, item: ScoreItem, thumbnails: Map<Int, Bitmap>,
+private fun ScoreRow(rank: Int, item: ScoreItem, max: Double, thumbnails: Map<Int, Bitmap>,
                      expanded: Boolean, onToggle: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable { onToggle() },
         verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -85,7 +86,7 @@ private fun ScoreRow(rank: Int, item: ScoreItem, thumbnails: Map<Int, Bitmap>,
             Text(ScoreView.pct(item.confidence), style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium)
         }
-        MeterBar(item.confidence.toFloat())
+        MeterBar(ScoreView.meter(item.confidence, max))
         if (expanded) {
             Text("cosine ${ScoreView.signedCos(item.rawSimilarity)}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -15,6 +15,11 @@ object ScoreView {
     /** Confidence desc; Kotlin's sort is stable so ties keep input order. */
     fun ranked(scores: List<ScoreItem>): List<ScoreItem> = scores.sortedByDescending { it.confidence }
 
+    /** Meter fill relative to the top label (Python parity: bar = confidence / maxConfidence).
+     *  SigLIP2's absolute sigmoid confidence is near-zero, so an absolute meter is uninformative. */
+    fun meter(confidence: Double, max: Double): Float =
+        if (max > 0.0) (confidence / max).toFloat().coerceIn(0f, 1f) else 0f
+
     fun pct(v: Double): String = String.format(Locale.US, "%.1f%%", v * 100)
     fun signedCos(v: Double): String = String.format(Locale.US, "%+.3f", v)
     fun secs(v: Double): String = String.format(Locale.US, "%.1f s", v)
