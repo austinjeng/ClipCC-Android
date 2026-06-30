@@ -1,7 +1,7 @@
 # HANDOFF — Classify UI (CSV import + results redesign + meter fix)
 
-**Date:** 2026-07-01 · **Branch:** `main` (clean, == `origin/main` == `c4387d3`, pushed).
-**Device:** Pixel 9a `4C081JEBF03962`, app installed = `c4387d3` (the tested build).
+**Date:** 2026-07-01 · **Branch:** `main` at `90dfcfc` — **2 commits ahead of `origin/main`, NOT pushed**.
+**Device:** Pixel 9a `4C081JEBF03962`, app installed = `6c656d5` (temporal-meter-fix build, self-tested).
 
 ## TL;DR — what shipped this session (all merged to `main`, pushed, on the phone)
 
@@ -14,8 +14,15 @@
    `Remove duplicates` repair. New: `ScoreView` (pure, JVM-tested), `MeterBar`.
 3. **Results meter bugfix** (`c4387d3`, direct on `main`). See "The bug we just fixed".
 - (Pixel 9a **selectable precision** fp32/fp16/int8 was already on `main` via PR #1 before this session.)
+4. **Temporal meter fix + README** (NEXT session, `6c656d5` + `90dfcfc`, direct on `main`, unpushed).
+   TEMPORAL Segment (`peakConfidence`) and Label-summary (`durationWeightedConfidence`) `MeterBar`s were
+   absolute → near-empty (the **same** bug as #3). Made each relative to its own list's max via
+   `ScoreView.meter(v,max)` (`ModeExtras.kt`). Python has no temporal meters → relative is the consistent
+   Android choice. **Device-verified** on Pixel 9a (base-256/int8, temporal, threshold 0): Segments +
+   summaries render descending ladders. Added `ScoreView.meter` unit tests. READMEs (EN+zh-TW) now
+   document the Classify UI / precision / CSV / provisioning / 20-tap reveal; test count 59→123.
 
-JVM suite: **121 tests, 0 failures**. All UI verified by assembleDebug + on-device.
+JVM suite: **123 tests, 0 failures**. All UI verified by assembleDebug + on-device.
 
 ## The bug we just fixed (read this — it's the recurring class of bug)
 
@@ -54,21 +61,22 @@ results section is where bugs recur (this 0.0% bug passed all JVM tests + assemb
 
 ## What's LEFT (prioritized)
 
-1. **Unit test for `ScoreView.meter`** — skipped under context pressure. Add: `meter(0.5,1.0)==0.5f`,
-   `meter(x,0.0)==0f` (div-zero guard), `meter` coerces to 0..1. (`ScoreViewTest.kt`.)
-2. **TEMPORAL meters have the SAME absolute-confidence issue** — `ModeExtras.TemporalExtras` segment
-   `peakConfidence` + summary `durationWeightedConfidence` `MeterBar`s are absolute → likely near-empty
-   for weak matches. Decide per Python's temporal view (not yet mapped) whether to make them relative
-   too. (Untouched this session.)
-3. **Delete the 3 merged local branches** (`feat/csv-label-import`, `feat/pixel9a-selectable-precision`,
-   `feat/classify-results-redesign`) — all in `main`, redundant. (`git branch -d ...`.)
-4. **README** (`README.md` + `README.zh-TW.md`) — still only mention precision in the benchmark sense;
-   document CSV import, the results UI, the `adb push`→`getExternalFilesDir/models` provisioning, and
-   the 20-tap CONTRAST reveal. (Carried over from the precision handoff; never done.)
-5. **Manual UAT for the results redesign** — MEAN path verified on-device; TEMPORAL / CONTRAST / MAX
-   peak-thumbnail / 1000-label-cap paths NOT yet eyeballed. Checklist (a–h) in the plan.
-6. **Host export tooling** (Python repo `tools/android_assets/export_models.py`) — emit v2 multi-precision
-   bundles so provisioning isn't hand-assembled. (Carried over; never done.)
+DONE this session (commits `6c656d5` + `90dfcfc`, on `main`, **unpushed**): ~~`ScoreView.meter` test~~ ✓ ·
+~~TEMPORAL meters relative~~ ✓ (device-verified) · ~~delete 3 merged branches~~ ✓ · ~~README EN+zh-TW~~ ✓.
+
+1. **Push `main`** — 2 commits ahead of `origin/main`. (`git push`.) Held only because commit-only-on-ask.
+2. **Manual UAT for the results redesign** — MEAN + TEMPORAL verified on-device; **CONTRAST / MAX
+   peak-thumbnail / 1000-label-cap** paths NOT yet eyeballed. Checklist (a–h) in the plan. Driving the
+   SAF picker via `adb input tap` + `uiautomator dump` (read bounds, don't eyeball) works; results render
+   **at the bottom of the same scroll** — swipe all the way down after Run. (Two adb gotchas: `input text`
+   drops repeated `0`s, so type tiny decimals digit-by-digit or just use `0`; a double-`keyevent 4` exits
+   the app.)
+3. **Host export tooling** (Python repo `tools/android_assets/export_models.py`) — automate emitting the
+   schema-v2 multi-precision bundles so provisioning isn't hand-assembled. (Carried over; never done.)
+- **Latent question (NOT a regression):** the temporal detection threshold compares the **sigmoid**
+  confidence (`confidence[f][j] >= threshold`, `Scoring.kt`), where best ≈ 3e-4 — so the UI default `0.5`
+  detects ZERO segments on SigLIP2. Check Python's default temporal threshold for parity; the Android
+  default likely needs to be far smaller. (Out of scope for the meter fix; surfaced while self-testing.)
 - **Accepted-as-is** (results-redesign final review): TEMPORAL Segments list can show a label not in the
   top-6 timeline series (spec-faithful); segment/summary meters use theme `primary`, not per-series color.
 
