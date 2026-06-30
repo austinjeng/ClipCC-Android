@@ -29,9 +29,16 @@ class ModelRepository(private val modelsRoot: File) {
             return ModelInfo(dir.name, dir.name, 0, "", "", false, "bad manifest: ${t.message}", dir.absolutePath)
         }
         val reason = readinessReason(dir, m)
+        // Offer a precision only if BOTH its towers match the manifest's declared size. A truncated /
+        // wrong-variant / corrupt file (e.g. a bad int8 push) is dropped from the picker instead of
+        // loading and silently emitting zero-confidence embeddings. length() is 0 for a missing file,
+        // so this also covers existence.
+        // ponytail: size-only (cheap, runs every scan); sha256 would hash ~GBs per launch — make it an
+        // on-demand "deep verify" if bit-rot of a right-sized file ever matters.
         val avail = m.availablePrecisions.filter { p ->
             val f = m.filesFor(p)
-            File(dir, f.visionFile).exists() && File(dir, f.textFile).exists()
+            File(dir, f.visionFile).length() == f.visionBytes &&
+                File(dir, f.textFile).length() == f.textBytes
         }
         return ModelInfo(
             id = dir.name, displayName = m.displayName, resolution = m.resolution,
