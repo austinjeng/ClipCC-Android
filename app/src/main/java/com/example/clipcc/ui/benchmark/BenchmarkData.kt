@@ -4,7 +4,8 @@ import org.json.JSONObject
 
 data class TimedRow(
     val backend: String, val loadMs: Long, val visionMsMedian: Long,
-    val msPerFrame: Double, val fps: Double, val visionDelegatedPct: Double?,
+    val msPerFrame: Double, val msPerFrameMin: Double, val msPerFrameMax: Double,
+    val fps: Double, val visionDelegatedPct: Double?,
 )
 data class CapabilityRow(val backend: String, val visionDelegatedPct: Double, val experimental: Boolean)
 data class ModelGroup(val modelId: String, val timed: List<TimedRow>, val capabilityOnly: List<CapabilityRow>)
@@ -31,11 +32,20 @@ object BenchmarkData {
         for (i in 0 until runs.length()) {
             val r = runs.getJSONObject(i)
             val model = r.getString("model"); val backend = r.getString("backend")
+            val medD = r.getDouble("visionMsMedian")
+            val mpf = r.getDouble("msPerFrame")
+            fun perFrame(totalKey: String): Double {
+                val v = r.getDouble(totalKey)
+                return if (medD > 0) mpf * v / medD else mpf
+            }
             timedByModel.getOrPut(model) { mutableListOf() }.add(
                 TimedRow(
                     backend = backend, loadMs = r.getLong("loadMs"),
                     visionMsMedian = r.getLong("visionMsMedian"),
-                    msPerFrame = r.getDouble("msPerFrame"), fps = r.getDouble("fps"),
+                    msPerFrame = mpf,
+                    msPerFrameMin = perFrame("visionMsMin"),
+                    msPerFrameMax = perFrame("visionMsMax"),
+                    fps = r.getDouble("fps"),
                     visionDelegatedPct = visionCoverage[model to backend],
                 )
             )
@@ -58,4 +68,31 @@ object BenchmarkData {
             ModelGroup(m, timedByModel[m] ?: emptyList(), capByModel[m] ?: emptyList())
         }
     }
+}
+
+data class SnapshotMeta(
+    val deviceModel: String?, val soc: String?, val ort: String?, val note: String?,
+    val framesByModel: Map<String, Int>,
+)
+
+/** Provenance + per-model sampled frame counts. Tolerant: absent fields → null / absent key.
+ *  The 7a asset has no `device`/`ort`/`note` → those return null; `prep[].frames` drives protocol-match. */
+fun BenchmarkData.parseMeta(json: String): SnapshotMeta {
+    val root = JSONObject(json)
+    val device = root.optJSONObject("device")
+    val frames = LinkedHashMap<String, Int>()
+    root.optJSONArray("prep")?.let { prep ->
+        for (i in 0 until prep.length()) {
+            val p = prep.getJSONObject(i)
+            if (p.has("model") && p.has("frames")) frames[p.getString("model")] = p.getInt("frames")
+        }
+    }
+    fun nullIfEmpty(s: String?) = s?.ifEmpty { null }
+    return SnapshotMeta(
+        deviceModel = nullIfEmpty(device?.optString("model")),
+        soc = nullIfEmpty(device?.optString("soc")),
+        ort = nullIfEmpty(root.optString("ort")),
+        note = nullIfEmpty(root.optString("note")),
+        framesByModel = frames,
+    )
 }
