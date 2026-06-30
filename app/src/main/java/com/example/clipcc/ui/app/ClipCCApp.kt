@@ -17,6 +17,7 @@ import androidx.media3.common.util.UnstableApi
 import com.example.clipcc.data.ModelRepository
 import com.example.clipcc.ui.benchmark.BenchmarkData
 import com.example.clipcc.ui.benchmark.BenchmarkScreen
+import com.example.clipcc.ui.benchmark.Pixel9aScreen
 import com.example.clipcc.ui.classify.*
 import java.io.File
 
@@ -24,15 +25,18 @@ import java.io.File
 @Composable
 fun ClipCCApp(onKeepAwake: (Boolean) -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
-    val titles = listOf("Classify", "Benchmark")
     Scaffold(modifier = Modifier.fillMaxSize()) { pad ->
         Column(Modifier.padding(pad)) {
             TabRow(selectedTabIndex = tab) {
-                titles.forEachIndexed { i, t ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t) })
+                AppTab.entries.forEachIndexed { i, t ->
+                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t.title) })
                 }
             }
-            if (tab == 0) ClassifyTab(onKeepAwake) else BenchmarkScreen()
+            when (AppTab.entries[tab]) {
+                AppTab.CLASSIFY -> ClassifyTab(onKeepAwake)
+                AppTab.BENCHMARK -> BenchmarkScreen()
+                AppTab.PIXEL9A -> Pixel9aScreen()
+            }
         }
     }
 }
