@@ -1,6 +1,6 @@
 # ClipCC-Android — Pixel 9a benchmark comparison tab
 
-**Date:** 2026-07-01 · **Status:** design — revised after review-AJ round 2 (H1/M1/M2/L1)
+**Date:** 2026-07-01 · **Status:** design — revised after review-AJ round 3 (L1 wording / L2 empty-reason / L3 route test)
 **Goal:** A third tab that shows the Pixel 9a (Tensor G4) benchmark next to the bundled Pixel 7a
 (Tensor G2) snapshot, with the **% faster** front and center — on a **protocol-equivalent, fail-closed,
 evidence-backed** basis.
@@ -12,8 +12,9 @@ The existing "Benchmark" tab is a **read-only** view of `app/src/main/assets/pha
 Pixel 9a" therefore means: feed in a real 9a snapshot and render the per-model speedup.
 
 A real 9a snapshot **already exists**: `docs/plans/spikeA-pixel9a-g4-benchmark-result.json` (Spike A,
-2026-06-28). Same schema (`device`/`profile`/`ort`/`note`/`prep`/`runs`/`capabilities`), all 4 models ×
-both CPU lanes. ORT 1.26.0 on both. Decision: **bundle the spikeA JSON as the 9a asset and ship now** — no
+2026-06-28). Same benchmark-result **core shape** (`prep`/`runs`/`capabilities`) as the 7a asset, **plus
+9a-only provenance fields** (`device`/`profile`/`ort`/`note`) that the 7a asset lacks; all 4 models × both
+CPU lanes. ORT 1.26.0 on both. Decision: **bundle the spikeA JSON as the 9a asset and ship now** — no
 device re-run.
 
 ### Protocol equivalence (review H1) — fail-closed
@@ -72,8 +73,9 @@ repeatability, not thermal drift.
 | 2 | `BenchmarkData.kt` | **edit** | (a) `TimedRow` gains `msPerFrameMin`/`Max` (= `visionMsMin/Max ÷ frames`). (b) `SnapshotMeta` + `parseMeta(json)` (device/soc/ort/note + per-model frames from `prep`). Existing `parse` otherwise unchanged. |
 | 3 | `BenchmarkCompare.kt` | new, pure JVM | Joins two `(List<ModelGroup>, SnapshotMeta)` → `Comparison`; fail-closed protocol-match; per-lane deltas, band-separation, hero. |
 | 4 | `Pixel9aScreen.kt` | new Composable | Asset-derived header, hero (with per-model range), protocol-matched rows w/ measured spread, caveated non-matched section, empty state. |
-| 5 | `ClipCCApp.kt` | edit | `enum class AppTab(val title)` {CLASSIFY, BENCHMARK, PIXEL9A}; `TabRow` + an **exhaustive** `when(AppTab.entries[tab])`. 7a Benchmark tab untouched. |
-| 6 | `BenchmarkCompareTest.kt`, `BenchmarkDataMetaTest.kt`, `AppTabTest.kt` + test-resource 9a JSON | new tests | Pure-JVM; join the existing 59-test suite. |
+| 5 | `ClipCCApp.kt` + `app/build.gradle.kts` | edit | `enum class AppTab(val title)` {CLASSIFY, BENCHMARK, PIXEL9A}; `TabRow` + an **exhaustive** `when(AppTab.entries[tab])`. 7a Benchmark tab untouched. Build: wire `debugImplementation(libs.androidx.compose.ui.test.manifest)` for the route test. |
+| 6 | `BenchmarkCompareTest.kt`, `BenchmarkDataMetaTest.kt`, `AppTabTest.kt` + test-resource 9a JSON | new tests (JVM) | Pure-JVM; join the existing 59-test suite. |
+| 7 | `ClipCCAppRouteTest.kt` | new test (instrumented) | One Compose route assertion (tab 2 → Pixel9a content). |
 
 New `.kt` UI files live in `ui/benchmark/`; the enum + tab in `ui/app/`. Tests under `app/src/test/java/...`.
 
@@ -143,21 +145,25 @@ Scrollable column, Material3 cards matching `BenchmarkScreen`:
    renders `≈ +{pct}% (within 3-run spread)`. **Non-protocol-matched** lanes (base/large CPU_EP) sit under a
    `— not protocol-matched (7 vs 16 frames) —` subheading, never bolded, never in the hero. Headline lane
    bolded/accented.
-4. **Empty state**: centered "Pixel 9a snapshot not bundled."
+4. **Empty state**: centered, message **keyed to the actual failure** (review L2) — not a fixed
+   "9a not bundled" for every case (which would misdiagnose a 7a problem).
 
 Formatting uses `Locale.US`.
 
-## Asset-loading contract — review M2 (round 1)
+## Asset-loading contract — review M2 (r1) / L2 (r3)
 
-| Case | Behavior |
-|---|---|
-| both load, overlap ≥ 1 model | render comparison |
-| 9a missing/malformed | empty state |
-| 7a missing/malformed | empty state (defensive) |
-| both load, no overlapping model | empty state |
+`load()` returns either a `Comparison` or an `EmptyReason` (`NO_9A` / `NO_7A` / `NO_OVERLAP`), and the empty
+state renders a message per reason:
 
-Implementation: `runCatching { parse + parseMeta }` per asset in the screen's `remember`; any failure or
-empty overlap → empty state. The existing `BenchmarkScreen` (7a tab) is **not** modified.
+| Case | Result | Empty-state message |
+|---|---|---|
+| both load, overlap ≥ 1 model | `Comparison` | — (renders comparison) |
+| 9a missing/malformed | `NO_9A` | "Pixel 9a snapshot not bundled." |
+| 7a missing/malformed | `NO_7A` | "Benchmark (Pixel 7a) snapshot unavailable." |
+| both load, no overlapping model | `NO_OVERLAP` | "No models common to both snapshots." |
+
+Implementation: `runCatching { parse + parseMeta }` per asset in the screen's `remember`; 9a failure → `NO_9A`,
+7a failure → `NO_7A`, empty overlap → `NO_OVERLAP`. The existing `BenchmarkScreen` (7a tab) is **not** modified.
 
 ## Data flow
 
@@ -179,9 +185,16 @@ assets/phase2-benchmark-result-9a.json ─ parse+parseMeta ─┘   (runCatching
 - **`BenchmarkDataMetaTest`** (pure JVM): `parseMeta` returns `framesByModel` {base/large 7 (7a) vs 16 (9a),
   so400m 4}; 9a `soc=="Google Tensor G4"`, `ort=="1.26.0"`; 7a device/ort `null`. `TimedRow.msPerFrameMin/Max`
   equal `visionMsMin/Max ÷ frames`.
-- **`AppTabTest`** (pure JVM, L1): `AppTab.entries.map { it.title } == ["Classify","Benchmark","Pixel 9a"]`
-  and `AppTab.PIXEL9A.ordinal == 2` — pins the index→identity routing the exhaustive `when` consumes.
-- **No device gate** — display-only over completed Spike A data. Manual: launch, screenshot the third tab.
+- **`AppTabTest`** (pure JVM): `AppTab.entries.map { it.title } == ["Classify","Benchmark","Pixel 9a"]`
+  and `AppTab.PIXEL9A.ordinal == 2` — pins the index→identity ordering the exhaustive `when` consumes.
+- **`ClipCCAppRouteTest`** (instrumented Compose, review L3): `createComposeRule`, set tab index 2, assert a
+  **Pixel9a-specific** string renders (the hero "% faster" / "protocol-matched") and a 7a-only string
+  (`BenchmarkScreen`'s "median-of-3" header) does **not** — closes the "wrong `when` body renders the wrong
+  screen" gap that a title-only test cannot. Reuses the existing `androidx.compose.ui.test.junit4` androidTest
+  dep; needs `debugImplementation(libs.androidx.compose.ui.test.manifest)` wired (catalog entry already
+  exists). Emulator-only — no models/clip needed.
+- **No data-capture gate** — display-only over completed Spike A data; the route test runs on a bare
+  emulator. Manual: launch, screenshot the third tab.
 
 ## Out of scope / deferred
 
@@ -198,8 +211,10 @@ M  app/src/main/java/com/example/clipcc/ui/benchmark/BenchmarkData.kt   (TimedRo
 A  app/src/main/java/com/example/clipcc/ui/benchmark/BenchmarkCompare.kt
 A  app/src/main/java/com/example/clipcc/ui/benchmark/Pixel9aScreen.kt
 M  app/src/main/java/com/example/clipcc/ui/app/ClipCCApp.kt            (AppTab enum + exhaustive route)
+M  app/build.gradle.kts                                                (debugImplementation ui-test-manifest)
 A  app/src/test/java/com/example/clipcc/ui/benchmark/BenchmarkCompareTest.kt
 A  app/src/test/java/com/example/clipcc/ui/benchmark/BenchmarkDataMetaTest.kt
 A  app/src/test/java/com/example/clipcc/ui/app/AppTabTest.kt
+A  app/src/androidTest/java/com/example/clipcc/ui/app/ClipCCAppRouteTest.kt   (instrumented route assertion)
 A  app/src/test/resources/phase2-benchmark-result-9a.json              (copy for tests)
 ```
