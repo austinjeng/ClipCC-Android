@@ -68,12 +68,16 @@ dependencies {
 }
 
 // --- Classify model auto-provisioning -------------------------------------------------------------
-// Classify reads its SigLIP2 bundles from the app's external files dir, which Android DELETES on every
-// uninstall — including the uninstall `connectedAndroidTest` performs when it finishes, and any manual
-// `adb uninstall`. The ~6.6 GB of bundles persist at /data/local/tmp/clipcc_models (survives uninstall;
-// only a factory reset clears it). This task restores any MISSING bundle after an install so the model
-// picker is never empty again. It runs after `installDebug`.
-// ponytail: `[ -d ... ]` guard copies only absent bundles — instant on a keep-data reinstall, a full
+// Classify reads its SigLIP2 bundles from the app's INTERNAL filesDir/models, which Android DELETES on
+// every uninstall — including the uninstall `connectedAndroidTest` performs when it finishes, and any
+// manual `adb uninstall`. The ~6.6 GB of bundles persist at /data/local/tmp/clipcc_models (survives
+// uninstall; only a factory reset clears it). This task restores any MISSING bundle after an install so
+// the model picker is never empty again. It runs after `installDebug`.
+//
+// Must copy AS THE APP UID via `run-as`: on Android 13+ (fuse-bpf) files that plain `adb shell cp` writes
+// into the app's dirs are owned by `shell` and unreadable by the app. `run-as` runs as the app uid, so
+// files land app-owned. The staging is chmod'd world-readable first so the app uid can read it.
+// ponytail: `run-as test -d` guard copies only absent bundles — instant on a keep-data reinstall, a full
 // re-copy only after an actual wipe. Never fails the build (no device / no adb / no staged source -> skip).
 val clipccModelBundles = listOf(
     "siglip2-base-patch16-256", "siglip2-base-patch16-384",
@@ -81,22 +85,25 @@ val clipccModelBundles = listOf(
 )
 val provisionModels = tasks.register<Exec>("provisionModels") {
     group = "install"
-    description = "Restore missing Classify model bundles into the app's external files dir from /data/local/tmp/clipcc_models"
+    description = "Restore missing Classify model bundles into the app's internal filesDir via run-as (from /data/local/tmp/clipcc_models)"
     val androidSdk = System.getenv("ANDROID_HOME")
         ?: System.getenv("ANDROID_SDK_ROOT")
         ?: rootProject.file("local.properties").takeIf { it.exists() }
             ?.readLines()?.firstOrNull { it.startsWith("sdk.dir=") }?.substringAfter("=")?.trim()
         ?: "${System.getProperty("user.home")}/Library/Android/sdk"
     val adb = "$androidSdk/platform-tools/adb"
+    val pkg = "com.example.clipcc"
     val src = "/data/local/tmp/clipcc_models"
-    val dst = "/sdcard/Android/data/com.example.clipcc/files/models"
+    val dst = "/data/data/$pkg/files/models"
     val names = clipccModelBundles.joinToString(" ")
     commandLine(
         adb, "shell",
         "if [ ! -d $src ]; then echo 'clipcc: no staged bundles at $src - skip provisioning'; exit 0; fi; " +
-            "mkdir -p $dst; for m in $names; do " +
-            "if [ -d \"$dst/\$m\" ]; then echo \"clipcc: present \$m\"; " +
-            "else cp -r \"$src/\$m\" \"$dst/\" && echo \"clipcc: provisioned \$m\"; fi; done",
+            "chmod -R o+rX $src; " +
+            "run-as $pkg mkdir -p $dst || { echo 'clipcc: run-as failed (app not installed/debuggable?)'; exit 0; }; " +
+            "for m in $names; do " +
+            "if run-as $pkg test -d $dst/\$m; then echo \"clipcc: present \$m\"; " +
+            "else run-as $pkg cp -r $src/\$m $dst/ && echo \"clipcc: provisioned \$m\"; fi; done",
     )
     isIgnoreExitValue = true
 }

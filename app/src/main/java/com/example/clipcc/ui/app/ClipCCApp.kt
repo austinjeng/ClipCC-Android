@@ -47,10 +47,12 @@ private fun ClassifyTab(onKeepAwake: (Boolean) -> Unit) {
     val appCtx = LocalContext.current.applicationContext
     val vm: ClassifyViewModel = viewModel(factory = viewModelFactory {
         initializer {
-            // Scan the app's external files dir (adb-pushable: /sdcard/Android/data/<pkg>/files/models),
-            // falling back to internal storage. ponytail: external dir makes `adb push` provisioning work
-            // directly — no run-as/stream dance.
-            val modelsRoot = File(appCtx.getExternalFilesDir(null) ?: appCtx.filesDir, "models")
+            // Models live in INTERNAL filesDir/models. NOT external: on Android 13+ (fuse-bpf) files that
+            // adb/shell/run-as write into the app's external dir (/sdcard/Android/data/<pkg>/files) are
+            // owned by `shell` and unreadable by the app — only the app process itself can create readable
+            // files there, so external is unprovisionable by tooling. filesDir is app-owned and always
+            // readable; provision it with `run-as <pkg> cp ...` (the `provisionModels` Gradle task does this).
+            val modelsRoot = File(appCtx.filesDir, "models")
             val models = ModelRepository(modelsRoot).scan()
             val groups = BenchmarkData.parse(
                 appCtx.assets.open("phase2-benchmark-result.json").bufferedReader().use { it.readText() })

@@ -47,7 +47,7 @@ fun SetupCard(state: SetupState, vm: ClassifyViewModel, running: Boolean) {
             )
             ExposedDropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
                 if (state.availableModels.isEmpty()) {
-                    DropdownMenuItem(text = { Text("No models provisioned — adb push to files/models/") },
+                    DropdownMenuItem(text = { Text("No models provisioned — run ./gradlew provisionModels") },
                         onClick = {}, enabled = false)
                 }
                 state.availableModels.forEach { m ->
