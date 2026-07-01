@@ -85,4 +85,42 @@ class BenchmarkCompareTest {
             read9a = { res("phase2-benchmark-result-9a.json") })
         assertEquals(CompareResult.Empty(EmptyReason.NO_OVERLAP), r)
     }
+
+    // --- synthetic builders for branch-coverage tests (div0 guard, bandSeparated=false, load symmetry) ---
+    private fun timed(backend: String, mpf: Double, min: Double = mpf, max: Double = mpf) =
+        TimedRow(backend, 0L, mpf.toLong(), mpf, min, max, if (mpf > 0) 1000.0 / mpf else 0.0, null)
+    private fun group(id: String, vararg lanes: TimedRow) = ModelGroup(id, lanes.toList(), emptyList())
+    private fun metaOf(frames: Map<String, Int>) = SnapshotMeta(null, null, null, null, frames)
+
+    @Test fun div0_guards_produceZeroNotNaN() {
+        val g7 = listOf(group("m", timed("CPU_XNNPACK", 0.0)))  // ms7a==0 -> pctFaster guard
+        val g9 = listOf(group("m", timed("CPU_XNNPACK", 0.0)))  // ms9a==0 -> speedup guard
+        val meta = metaOf(mapOf("m" to 7))
+        val lane = BenchmarkCompare.build(g7 to meta, g9 to meta).models.single().lanes.single()
+        assertEquals(0.0, lane.pctFaster, 0.0)
+        assertEquals(0.0, lane.speedup, 0.0)
+        assertFalse("pctFaster must not be NaN", lane.pctFaster.isNaN())
+        assertFalse("speedup must not be NaN", lane.speedup.isNaN())
+    }
+
+    @Test fun bandSeparated_falseWhenSpreadsOverlap() {
+        // 9a max (120) is NOT < 7a min (100) -> the [min,max] bands overlap -> not band-separated
+        val g7 = listOf(group("m", timed("CPU_XNNPACK", 150.0, min = 100.0, max = 200.0)))
+        val g9 = listOf(group("m", timed("CPU_XNNPACK", 130.0, min = 90.0, max = 120.0)))
+        val meta = metaOf(mapOf("m" to 7))
+        val lane = BenchmarkCompare.build(g7 to meta, g9 to meta).models.single().lanes.single()
+        assertFalse(lane.bandSeparated)
+    }
+
+    @Test fun load_missing7a_returnsNo7a() {
+        val r = BenchmarkCompare.load(read7a = { null },
+            read9a = { res("phase2-benchmark-result-9a.json") })
+        assertEquals(CompareResult.Empty(EmptyReason.NO_7A), r)
+    }
+
+    @Test fun load_malformed9a_returnsNo9a() {
+        val r = BenchmarkCompare.load(read7a = { res("phase2-benchmark-result.json") },
+            read9a = { "{ broken" })
+        assertEquals(CompareResult.Empty(EmptyReason.NO_9A), r)
+    }
 }
